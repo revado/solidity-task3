@@ -3,7 +3,7 @@ const { ethers } = hre;
 import { expect } from "chai";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 
-describe("NFTAuction with Chainlink Price Feeds", function () {
+describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
     let nftAuction;
     let mockNFT;
     let mockETHUSD;
