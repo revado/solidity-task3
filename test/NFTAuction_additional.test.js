@@ -76,7 +76,7 @@ describe("NFT 合约补充测试", function () {
                     START_PRICE_USD,
                     SHORT_DURATION
                 )
-            ).to.be.revertedWith("Invalid price converter address");
+            ).to.be.revertedWithCustomError(nftAuction, "InvalidPriceConverterAddress");
         });
 
         it("应该在创建拍卖时，拒绝零地址的 NFT 合约", async function () {
@@ -90,7 +90,7 @@ describe("NFT 合约补充测试", function () {
                     START_PRICE_USD,
                     SHORT_DURATION
                 )
-            ).to.be.revertedWith("Invalid NFT contract address");
+            ).to.be.revertedWithCustomError(nftAuction, "InvalidNFTContractAddress");
         });
 
         it("应该在创建拍卖时，拒绝持续时间小于 10 分钟的拍卖", async function () {
@@ -108,7 +108,7 @@ describe("NFT 合约补充测试", function () {
                     START_PRICE_USD,
                     600 // exactly 10 minutes
                 )
-            ).to.be.revertedWith("Duration must be at least 10 minutes");
+            ).to.be.revertedWithCustomError(nftAuction, "DurationTooShort");
         });
     });
 
@@ -131,7 +131,7 @@ describe("NFT 合约补充测试", function () {
         it("应该在拍卖不存在时回退", async function () {
             await expect(
                 nftAuction.placeBid(999, ethers.ZeroAddress, 0, { value: ethers.parseEther("1") })
-            ).to.be.revertedWith("Auction does not exist");
+            ).to.be.revertedWithCustomError(nftAuction, "AuctionDoesNotExist");
         });
 
         it("应该在卖家竞拍自己的拍卖时回退", async function () {
@@ -145,7 +145,7 @@ describe("NFT 合约补充测试", function () {
 
             await expect(
                 nftAuction.placeBid(0, ethers.ZeroAddress, 0, { value: ethers.parseEther("1") })
-            ).to.be.revertedWith("Seller cannot bid on own auction");
+            ).to.be.revertedWithCustomError(nftAuction, "SellerCannotBidOnOwnAuction");
         });
 
         it("应该在出价时，拒绝 ETH 金额小于等于零", async function () {
@@ -159,7 +159,7 @@ describe("NFT 合约补充测试", function () {
 
             await expect(
                 nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, { value: 0 })
-            ).to.be.revertedWith("Must send ETH");
+            ).to.be.revertedWithCustomError(nftAuction, "MustSendETH");
         });
 
         it("应该在出价时，拒绝 ERC20 金额小于等于零", async function () {
@@ -184,7 +184,7 @@ describe("NFT 合约补充测试", function () {
                     await token.getAddress(),
                     0
                 )
-            ).to.be.revertedWith("Amount must be greater than 0");
+            ).to.be.revertedWithCustomError(nftAuction, "AmountMustBeGreaterThanZero");
         });
 
         it("应该在出价时，拒绝价格预言机未设置的 ERC20 代币", async function () {
@@ -238,7 +238,7 @@ describe("NFT 合约补充测试", function () {
 
             await expect(
                 nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, { value: ethers.parseEther("1") })
-            ).to.be.revertedWith("Auction already ended");
+            ).to.be.revertedWithCustomError(nftAuction, "AuctionAlreadyEnded");
         });
     });
 

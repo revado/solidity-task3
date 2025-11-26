@@ -140,7 +140,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
                     START_PRICE_USD,
                     100000
                 )
-            ).to.be.revertedWith("Only NFT owner can create auction");
+            ).to.be.revertedWithCustomError(nftAuction, "OnlyNFTOwnerCanCreateAuction");
         });
 
         it("起始价格必须大于0", async function () {
@@ -154,7 +154,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
                     0, // 无效的起始价
                     100000
                 )
-            ).to.be.revertedWith("Start price must be greater than 0");
+            ).to.be.revertedWithCustomError(nftAuction, "StartPriceMustBeGreaterThanZero");
         });
     });
 
@@ -193,7 +193,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
                 nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
                     value: lowBid
                 })
-            ).to.be.revertedWith("Bid must be at least the starting price");
+            ).to.be.revertedWithCustomError(nftAuction, "BidMustBeAtLeastStartingPrice");
         });
 
         it("后续出价必须高于当前最高价", async function () {
@@ -207,7 +207,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
                 nftAuction.connect(bidder2).placeBid(0, ethers.ZeroAddress, 0, {
                     value: firstBid
                 })
-            ).to.be.revertedWith("Bid must be higher than the current highest bid");
+            ).to.be.revertedWithCustomError(nftAuction, "BidMustBeHigherThanCurrentHighestBid");
         });
 
         it("应该退还前一个出价者的资金", async function () {
@@ -235,7 +235,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
                 nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
                     value: ethers.parseEther("1.0")
                 })
-            ).to.be.revertedWith("Auction expired");
+            ).to.be.revertedWithCustomError(nftAuction, "AuctionExpired");
         });
     });
 
@@ -281,7 +281,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
                     bidAmount,
                     { value: ethers.parseEther("0.1") } // 不应该发送 ETH
                 )
-            ).to.be.revertedWith("ETH not accepted for ERC-20 bids");
+            ).to.be.revertedWithCustomError(nftAuction, "ETHNotAcceptedForERC20Bids");
         });
 
         it("USDC 竞价需要先授权", async function () {
@@ -440,7 +440,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         it("拍卖未结束不能调用 endAuction", async function () {
             await expect(
                 nftAuction.endAuction(0)
-            ).to.be.revertedWith("Auction has not ended yet");
+            ).to.be.revertedWithCustomError(nftAuction, "AuctionHasNotEndedYet");
         });
 
         it("非卖家或管理员不能结束拍卖", async function () {
@@ -448,7 +448,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
 
             await expect(
                 nftAuction.connect(bidder1).endAuction(0)
-            ).to.be.revertedWith("Only seller or admin can end auction");
+            ).to.be.revertedWithCustomError(nftAuction, "OnlySellerOrAdminCanEndAuction");
         });
 
         it("不能重复结束拍卖", async function () {
@@ -457,7 +457,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
 
             await expect(
                 nftAuction.endAuction(0)
-            ).to.be.revertedWith("Auction has already ended");
+            ).to.be.revertedWithCustomError(nftAuction, "AuctionAlreadyEnded");
         });
     });
 

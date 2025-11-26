@@ -318,7 +318,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
                     await mockDAI.getAddress(),
                     daiAmount
                 )
-            ).to.be.revertedWith("Bid must be at least the starting price");
+            ).to.be.revertedWithCustomError(nftAuction, "BidMustBeAtLeastStartingPrice");
         });
     });
 });

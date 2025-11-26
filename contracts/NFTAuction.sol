@@ -12,6 +12,25 @@ import { IPriceConverter } from "./interfaces/IPriceConverter.sol";
 
 // NFT 拍卖合约
 contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, ReentrancyGuardUpgradeable {
+	// ============================== 自定义错误 ==============================
+	error InvalidPriceConverterAddress();
+	error InvalidNFTContractAddress();
+	error OnlyNFTOwnerCanCreateAuction();
+	error DurationTooShort();
+	error StartPriceMustBeGreaterThanZero();
+	error AuctionDoesNotExist();
+	error AuctionAlreadyEnded();
+	error AuctionExpired();
+	error SellerCannotBidOnOwnAuction();
+	error MustSendETH();
+	error AmountMustBeGreaterThanZero();
+	error ETHNotAcceptedForERC20Bids();
+	error BidMustBeAtLeastStartingPrice();
+	error BidMustBeHigherThanCurrentHighestBid();
+	error AuctionHasNotEndedYet();
+	error OnlySellerOrAdminCanEndAuction();
+	error OnlyAdminCanUpgrade();
+
 	// 拍卖信息
 	struct Auction {
 		bool ended; // 拍卖是否结束
@@ -64,60 +83,6 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 		admin = msg.sender;
 	}
 
-	// /**
-	//  * @notice 设置不同资产价格源
-	//  * @param tokenAddress 代币地址
-	//  * @param priceFeed 价格源地址
-	//  */
-	// function setPriceFeed(address tokenAddress, address priceFeed) public {
-	// 	// 只有管理员可以设置价格源
-	// 	require(msg.sender == admin, "Only admin can set price feed");
-	// 	// 验证价格源地址有效
-	// 	require(priceFeed != address(0), "Invalid price feed address");
-
-	// 	priceFeeds[tokenAddress] = AggregatorV3Interface(priceFeed);
-
-	// 	try AggregatorV3Interface(priceFeed).latestRoundData() returns (
-	// 		uint80,
-	// 		int256 answer,
-	// 		uint256,
-	// 		uint256,
-	// 		uint80
-	// 	) {
-	// 		require(answer > 0, "Price feed returned invalid data");
-	// 	} catch {
-	// 		revert("Price feed is not functional");
-	// 	}
-	// }
-
-	// /**
-	//  * @notice 获取 Chainlink 价格源的最新价格
-	//  * @param tokenAddress 代币地址
-	//  * @return answer 最新价格
-	//  */
-	// function getChainlinkDataFeedLatestAnswer(address tokenAddress) public view returns (int256) {
-	// 	AggregatorV3Interface priceFeed = priceFeeds[tokenAddress];
-
-	// 	// 价格源需要提前设置
-	// 	require(address(priceFeed) != address(0), "Price feed not set for this token");
-
-	// 	(
-	// 		uint80 roundId,
-	// 		int256 answer,
-	// 		/* uint256 startedAt */,
-	// 		/* uint256 updatedAt */,
-	// 		uint80 answeredInRound
-	// 	) = priceFeed.latestRoundData();
-
-	// 	// 验证价格是否有效
-	// 	require(answer > 0, "Invalid price from feed");
-
-	// 	// 检查 found 是否完整，防止数据不一致
-	// 	require(answeredInRound == roundId, "Stale price data");
-
-	// 	return answer;
-	// }
-
 	/**
 	 * @notice 创建拍卖，允许任何 NFT 所有者创建拍卖
 	 * @param _nftContract NFT 合约地址
@@ -132,13 +97,23 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 		uint256 _startPrice,
 		uint256 _duration
 	) public {
-		require(_priceConverter != address(0), "Invalid price converter address");
-		require(_nftContract != address(0), "Invalid NFT contract address");
+		if (_priceConverter == address(0)) {
+			revert InvalidPriceConverterAddress();
+		}
+		if (_nftContract == address(0)) {
+			revert InvalidNFTContractAddress();
+		}
 		// 验证调用者是 NFT 所有者
-		require(IERC721(_nftContract).ownerOf(_tokenId) == msg.sender, "Only NFT owner can create auction");
+		if (IERC721(_nftContract).ownerOf(_tokenId) != msg.sender) {
+			revert OnlyNFTOwnerCanCreateAuction();
+		}
 		// 拍卖持续时间至少 10 分钟
-		require(_duration > 10 minutes, "Duration must be at least 10 minutes");
-		require(_startPrice > 0, "Start price must be greater than 0");
+		if (_duration <= 10 minutes) {
+			revert DurationTooShort();
+		}
+		if (_startPrice == 0) {
+			revert StartPriceMustBeGreaterThanZero();
+		}
 
 		// 转移 NFT 所有权到合约（NFT 所有者需要在此之前先授权给调用者）
 		IERC721(_nftContract).safeTransferFrom(msg.sender, address(this), _tokenId);
@@ -171,11 +146,19 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	 * @param seller 卖家地址
 	 */
 	function _validateBidConditions(Auction storage auction, address seller) private view {
-		require(seller != address(0), "Auction does not exist");
-		require(!auction.ended, "Auction already ended");
-		require(auction.startTime + auction.duration > block.timestamp, "Auction expired");
+		if (seller == address(0)) {
+			revert AuctionDoesNotExist();
+		}
+		if (auction.ended) {
+			revert AuctionAlreadyEnded();
+		}
+		if (auction.startTime + auction.duration <= block.timestamp) {
+			revert AuctionExpired();
+		}
 		// 卖家不能竞拍自己的拍卖
-		require(msg.sender != seller, "Seller cannot bid on own auction");
+		if (msg.sender == seller) {
+			revert SellerCannotBidOnOwnAuction();
+		}
 	}
 
 	/**
@@ -184,7 +167,9 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	 * @return bidAmount ETH 数量
 	 */
 	function _calculateETHBidValue() private view returns (uint256 payValueInUSD, uint256 bidAmount) {
-		require(msg.value > 0, "Must send ETH");
+		if (msg.value == 0) {
+			revert MustSendETH();
+		}
 
 		bidAmount = msg.value;
 		payValueInUSD = priceConverter.getEthValueInUSD(bidAmount);
@@ -198,8 +183,12 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
  	 * @return bidAmount 代币数量
 	 */
 	function _calculateERC20BidValue(address tokenAddress, uint256 amount) private view returns (uint256 payValueInUSD, uint256 bidAmount) {
-		require(amount > 0, "Amount must be greater than 0");
-		require(msg.value == 0, "ETH not accepted for ERC-20 bids");
+		if (amount == 0) {
+			revert AmountMustBeGreaterThanZero();
+		}
+		if (msg.value != 0) {
+			revert ETHNotAcceptedForERC20Bids();
+		}
 
 		bidAmount = amount;
 		payValueInUSD = priceConverter.getTokenValueInUSD(tokenAddress, amount);
@@ -231,11 +220,11 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	function _validateBidAmount(Auction storage auction, uint256 payValueInUSD, address currentTokenAddress, uint256 currentHighestBid) private view {
 		if (auction.highestBidder == address(0)) {
 			// 第一次出价，与起始价格比较。startPrice 是 8 位小数的美元价值
-			require(payValueInUSD >= auction.startPrice, "Bid must be at least the starting price");
+			if (payValueInUSD < auction.startPrice) revert BidMustBeAtLeastStartingPrice();
 		} else {
 			// 后续出价，与当前最高价比较。需要将前一次出价转换为美元价值
 			uint256 highestBidValueInUSD = _convertToUSDValue(currentTokenAddress, currentHighestBid);
-			require(payValueInUSD > highestBidValueInUSD, "Bid must be higher than the current highest bid");
+			if (payValueInUSD <= highestBidValueInUSD) revert BidMustBeHigherThanCurrentHighestBid();
 		}
 	}
 
@@ -259,14 +248,16 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	 * @param previousBid 之前的出价金额
 	 */
 	function _refundPreviousBidder(address previousBidder, address previousTokenAddress, uint256 previousBid) private {
-		if (previousBidder != address(0)) {
-			if (previousTokenAddress == address(0)) {
-				// 退回之前的 ETH
-				payable(previousBidder).transfer(previousBid);
-			} else {
-				// 退回之前的 ERC-20 代币
-				IERC20(previousTokenAddress).transfer(previousBidder, previousBid);
-			}
+		if (previousBidder == address(0)) {
+			return;
+		}
+
+		if (previousTokenAddress == address(0)) {
+			// 退回之前的 ETH
+			payable(previousBidder).transfer(previousBid);
+		} else {
+			// 退回之前的 ERC-20 代币
+			IERC20(previousTokenAddress).transfer(previousBidder, previousBid);
 		}
 	}
 
@@ -326,9 +317,15 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	 */
 	function endAuction(uint256 _auctionId) external {
 		Auction storage auction = auctions[_auctionId];
-		require(!auction.ended, "Auction has already ended");
-		require(block.timestamp > auction.startTime + auction.duration, "Auction has not ended yet");
-		require(msg.sender == auction.seller || msg.sender == admin, "Only seller or admin can end auction");
+		if (auction.ended) {
+			revert AuctionAlreadyEnded();
+		}
+		if (block.timestamp <= auction.startTime + auction.duration) {
+			revert AuctionHasNotEndedYet();
+		}
+		if (msg.sender != auction.seller && msg.sender != admin) {
+			revert OnlySellerOrAdminCanEndAuction();
+		}
 
 		auction.ended = true;
 
@@ -386,7 +383,7 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	 * @notice UUPS 升级授权函数，只有管理员可以升级合约
 	 */
 	function _authorizeUpgrade(address /* newImplementation */) internal override {
-		require(msg.sender == admin, "Only admin can upgrade");
+		if (msg.sender != admin) revert OnlyAdminCanUpgrade();
 	}
 
 	/**
