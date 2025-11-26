@@ -5,6 +5,7 @@ import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
     let nftAuction;
+    let priceConverter;
     let mockNFT;
     let mockETHUSD;
     let mockUSDCUSD;
@@ -32,7 +33,26 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         mockUSDCUSD = await MockV3Aggregator.deploy(8, USDC_PRICE);
         await mockUSDCUSD.waitForDeployment();
 
-        // 2. 直接部署 NFTAuction 合约（不使用 deployments.fixture）
+        // 2. 部署 PriceConverter
+        const PriceConverter = await ethers.getContractFactory("PriceConverter");
+        priceConverter = await PriceConverter.deploy();
+        await priceConverter.waitForDeployment();
+
+        // 3. 设置价格源
+        await priceConverter.setEthPriceFeed(await mockETHUSD.getAddress());
+
+        // 4. 部署 Mock USDC 代币
+        const MockERC20 = await ethers.getContractFactory("MockERC20");
+        mockUSDC = await MockERC20.deploy("Mock USDC", "USDC", USDC_DECIMALS);
+        await mockUSDC.waitForDeployment();
+
+        // 设置 USDC 价格源
+        await priceConverter.setTokenPriceFeed(
+            await mockUSDC.getAddress(),
+            await mockUSDCUSD.getAddress()
+        );
+
+        // 5. 部署 NFTAuction 合约（不使用 deployments.fixture）
         const NFTAuction = await ethers.getContractFactory("NFTAuction");
         const nftAuctionImpl = await NFTAuction.deploy();
         await nftAuctionImpl.waitForDeployment();
@@ -46,29 +66,12 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         nftAuctionAddress = await proxy.getAddress();
         nftAuction = await ethers.getContractAt("NFTAuction", nftAuctionAddress);
 
-        // 3. 设置价格源
-        await nftAuction.setPriceFeed(
-            ethers.ZeroAddress,
-            await mockETHUSD.getAddress()
-        );
-
-        // 4. 部署 Mock USDC 代币
-        const MockERC20 = await ethers.getContractFactory("MockERC20");
-        mockUSDC = await MockERC20.deploy("Mock USDC", "USDC", USDC_DECIMALS);
-        await mockUSDC.waitForDeployment();
-
-        // 设置 USDC 价格源
-        await nftAuction.setPriceFeed(
-            await mockUSDC.getAddress(),
-            await mockUSDCUSD.getAddress()
-        );
-
-        // 5. 给测试账户铸造 USDC
+        // 6. 给测试账户铸造 USDC
         await mockUSDC.mint(bidder1.address, ethers.parseUnits("10000", USDC_DECIMALS));
         await mockUSDC.mint(bidder2.address, ethers.parseUnits("10000", USDC_DECIMALS));
         await mockUSDC.mint(bidder3.address, ethers.parseUnits("10000", USDC_DECIMALS));
 
-        // 6. 部署 Mock NFT 并铸造
+        // 7. 部署 Mock NFT 并铸造
         const MockNFT = await ethers.getContractFactory("MockNFT");
         mockNFT = await MockNFT.deploy();
         await mockNFT.waitForDeployment();
@@ -77,35 +80,32 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
 
     describe("价格源设置和验证", function () {
         it("应该正确设置 ETH 价格源", async function () {
-            const price = await nftAuction.getChainlinkDataFeedLatestAnswer(ethers.ZeroAddress);
+            const price = await priceConverter.getEthPrice();
             expect(price).to.equal(ETH_PRICE);
         });
 
         it("应该正确设置 USDC 价格源", async function () {
-            const price = await nftAuction.getChainlinkDataFeedLatestAnswer(await mockUSDC.getAddress());
+            const price = await priceConverter.getTokenPrice(await mockUSDC.getAddress());
             expect(price).to.equal(USDC_PRICE);
         });
 
-        it("非管理员不能设置价格源", async function () {
+        it("非 owner 不能设置价格源", async function () {
             await expect(
-                nftAuction.connect(bidder1).setPriceFeed(
-                    ethers.ZeroAddress,
-                    await mockETHUSD.getAddress()
-                )
-            ).to.be.revertedWith("Only admin can set price feed");
+                priceConverter.connect(bidder1).setEthPriceFeed(await mockETHUSD.getAddress())
+            ).to.be.revertedWithCustomError(priceConverter, "OwnableUnauthorizedAccount");
         });
 
         it("不能设置零地址作为价格源", async function () {
             await expect(
-                nftAuction.setPriceFeed(ethers.ZeroAddress, ethers.ZeroAddress)
-            ).to.be.revertedWith("Invalid price feed address");
+                priceConverter.setEthPriceFeed(ethers.ZeroAddress)
+            ).to.be.revertedWithCustomError(priceConverter, "InvalidEthPriceFeed");
         });
 
         it("查询未设置的代币价格源应该失败", async function () {
             const randomToken = "0x1234567890123456789012345678901234567890";
             await expect(
-                nftAuction.getChainlinkDataFeedLatestAnswer(randomToken)
-            ).to.be.revertedWith("Price feed not set for this token");
+                priceConverter.getTokenPrice(randomToken)
+            ).to.be.reverted;
         });
     });
 
@@ -115,6 +115,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
 
             await expect(
                 nftAuction.createAuction(
+                    await priceConverter.getAddress(),
                     await mockNFT.getAddress(),
                     0,
                     START_PRICE_USD,
@@ -133,6 +134,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
 
             await expect(
                 nftAuction.connect(bidder1).createAuction(
+                    await priceConverter.getAddress(),
                     await mockNFT.getAddress(),
                     0,
                     START_PRICE_USD,
@@ -146,6 +148,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
 
             await expect(
                 nftAuction.createAuction(
+                    await priceConverter.getAddress(),
                     await mockNFT.getAddress(),
                     0,
                     0, // 无效的起始价
@@ -159,6 +162,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         beforeEach(async function () {
             await mockNFT.approve(nftAuctionAddress, 0);
             await nftAuction.createAuction(
+                await priceConverter.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -239,6 +243,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         beforeEach(async function () {
             await mockNFT.approve(nftAuctionAddress, 0);
             await nftAuction.createAuction(
+                await priceConverter.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -297,6 +302,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         beforeEach(async function () {
             await mockNFT.approve(nftAuctionAddress, 0);
             await nftAuction.createAuction(
+                await priceConverter.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -367,6 +373,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         beforeEach(async function () {
             await mockNFT.approve(nftAuctionAddress, 0);
             await nftAuction.createAuction(
+                await priceConverter.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -458,6 +465,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         it("负价格应该被拒绝", async function () {
             await mockNFT.approve(nftAuctionAddress, 0);
             await nftAuction.createAuction(
+                await priceConverter.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -471,7 +479,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
                 nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
                     value: ethers.parseEther("0.5")
                 })
-            ).to.be.revertedWith("Invalid price from feed");
+            ).to.be.revertedWithCustomError(priceConverter, "InvalidPrice");
         });
     });
 
@@ -479,6 +487,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         beforeEach(async function () {
             await mockNFT.approve(nftAuctionAddress, 0);
             await nftAuction.createAuction(
+                await priceConverter.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,

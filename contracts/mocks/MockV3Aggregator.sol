@@ -22,6 +22,7 @@ contract MockV3Aggregator is AggregatorV3Interface {
     mapping(uint256 => int256) public getAnswer;
     mapping(uint256 => uint256) public getTimestamp;
     mapping(uint256 => uint256) private getStartedAt;
+    mapping(uint256 => uint256) private getAnsweredInRound;
 
     constructor(uint8 _decimals, int256 _initialAnswer) {
         decimals = _decimals;
@@ -35,6 +36,7 @@ contract MockV3Aggregator is AggregatorV3Interface {
         getAnswer[latestRound] = _answer;
         getTimestamp[latestRound] = block.timestamp;
         getStartedAt[latestRound] = block.timestamp;
+        getAnsweredInRound[latestRound] = latestRound;
     }
 
     function updateRoundData(
@@ -49,6 +51,23 @@ contract MockV3Aggregator is AggregatorV3Interface {
         getAnswer[latestRound] = _answer;
         getTimestamp[latestRound] = _timestamp;
         getStartedAt[latestRound] = _startedAt;
+        getAnsweredInRound[latestRound] = _roundId;
+    }
+
+    function updateRoundData(
+        uint80 _roundId,
+        int256 _answer,
+        uint256 _timestamp,
+        uint256 _startedAt,
+        uint80 _answeredInRound
+    ) public {
+        latestRound = _roundId;
+        latestAnswer = _answer;
+        latestTimestamp = _timestamp;
+        getAnswer[latestRound] = _answer;
+        getTimestamp[latestRound] = _timestamp;
+        getStartedAt[latestRound] = _startedAt;
+        getAnsweredInRound[latestRound] = _answeredInRound;
     }
 
     function getRoundData(
@@ -70,7 +89,7 @@ contract MockV3Aggregator is AggregatorV3Interface {
             getAnswer[_roundId],
             getStartedAt[_roundId],
             getTimestamp[_roundId],
-            _roundId
+            uint80(getAnsweredInRound[_roundId])
         );
     }
 
@@ -91,7 +110,7 @@ contract MockV3Aggregator is AggregatorV3Interface {
             getAnswer[latestRound],
             getStartedAt[latestRound],
             getTimestamp[latestRound],
-            uint80(latestRound)
+            uint80(getAnsweredInRound[latestRound])
         );
     }
 

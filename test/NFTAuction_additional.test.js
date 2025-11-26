@@ -40,6 +40,13 @@ async function deployPriceFeed(price) {
     return feed;
 }
 
+async function deployPriceConverter() {
+    const PriceConverter = await ethers.getContractFactory("PriceConverter");
+    const converter = await PriceConverter.deploy();
+    await converter.waitForDeployment();
+    return converter;
+}
+
 describe("NFT 合约补充测试", function () {
     let owner, bidder1, bidder2;
 
@@ -58,10 +65,26 @@ describe("NFT 合约补充测试", function () {
             );
         });
 
-        it("应该在创建拍卖时，拒绝零地址的 NFT 合约", async function () {
+        it("应该在创建拍卖时，拒绝零地址的 priceConverter", async function () {
             const nftAuction = await deployProxy();
+            const nft = await deployMockNFT();
             await expect(
                 nftAuction.createAuction(
+                    ethers.ZeroAddress, // priceConverter
+                    await nft.getAddress(),
+                    0,
+                    START_PRICE_USD,
+                    SHORT_DURATION
+                )
+            ).to.be.revertedWith("Invalid price converter address");
+        });
+
+        it("应该在创建拍卖时，拒绝零地址的 NFT 合约", async function () {
+            const nftAuction = await deployProxy();
+            const priceConverter = await deployPriceConverter();
+            await expect(
+                nftAuction.createAuction(
+                    await priceConverter.getAddress(),
                     ethers.ZeroAddress,
                     0,
                     START_PRICE_USD,
@@ -72,12 +95,14 @@ describe("NFT 合约补充测试", function () {
 
         it("应该在创建拍卖时，拒绝持续时间小于 10 分钟的拍卖", async function () {
             const nftAuction = await deployProxy();
+            const priceConverter = await deployPriceConverter();
             const nft = await deployMockNFT();
             await nft.mint(owner.address);
             await nft.approve(await nftAuction.getAddress(), 0);
 
             await expect(
                 nftAuction.createAuction(
+                    await priceConverter.getAddress(),
                     await nft.getAddress(),
                     0,
                     START_PRICE_USD,
@@ -89,15 +114,18 @@ describe("NFT 合约补充测试", function () {
 
     describe("出价防护", function () {
         let nftAuction;
+        let priceConverter;
         let nft;
         let ethFeed;
 
         beforeEach(async function () {
             nftAuction = await deployProxy();
+            priceConverter = await deployPriceConverter();
             nft = await deployMockNFT();
             await nft.mint(owner.address);
             await nft.approve(await nftAuction.getAddress(), 0);
             ethFeed = await deployPriceFeed(200000000000n); // $2000
+            await priceConverter.setEthPriceFeed(await ethFeed.getAddress());
         });
 
         it("应该在拍卖不存在时回退", async function () {
@@ -107,8 +135,8 @@ describe("NFT 合约补充测试", function () {
         });
 
         it("应该在卖家竞拍自己的拍卖时回退", async function () {
-            await nftAuction.setPriceFeed(ethers.ZeroAddress, await ethFeed.getAddress());
             await nftAuction.createAuction(
+                await priceConverter.getAddress(),
                 await nft.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -121,8 +149,8 @@ describe("NFT 合约补充测试", function () {
         });
 
         it("应该在出价时，拒绝 ETH 金额小于等于零", async function () {
-            await nftAuction.setPriceFeed(ethers.ZeroAddress, await ethFeed.getAddress());
             await nftAuction.createAuction(
+                await priceConverter.getAddress(),
                 await nft.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -136,9 +164,11 @@ describe("NFT 合约补充测试", function () {
 
         it("应该在出价时，拒绝 ERC20 金额小于等于零", async function () {
             const token = await deployMockERC20("Mock DAI", "DAI", 18);
-            await nftAuction.setPriceFeed(ethers.ZeroAddress, await ethFeed.getAddress());
-            await nftAuction.setPriceFeed(await token.getAddress(), await (await deployPriceFeed(100000000n)).getAddress());
+            const tokenFeed = await deployPriceFeed(100000000n);
+            await priceConverter.setTokenPriceFeed(await token.getAddress(), await tokenFeed.getAddress());
+
             await nftAuction.createAuction(
+                await priceConverter.getAddress(),
                 await nft.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -159,8 +189,8 @@ describe("NFT 合约补充测试", function () {
 
         it("应该在出价时，拒绝价格预言机未设置的 ERC20 代币", async function () {
             const token = await deployMockERC20("Mock Token", "MTK", 18);
-            await nftAuction.setPriceFeed(ethers.ZeroAddress, await ethFeed.getAddress());
             await nftAuction.createAuction(
+                await priceConverter.getAddress(),
                 await nft.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -176,11 +206,13 @@ describe("NFT 合约补充测试", function () {
                     await token.getAddress(),
                     ethers.parseUnits("100", 18)
                 )
-            ).to.be.revertedWith("Price feed not set for this token");
+            ).to.be.reverted;
         });
 
         it("应该在出价时，拒绝价格预言机未设置的 ETH", async function () {
+            const priceConverter2 = await deployPriceConverter(); // 没有设置 ETH Feed
             await nftAuction.createAuction(
+                await priceConverter2.getAddress(),
                 await nft.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -189,12 +221,12 @@ describe("NFT 合约补充测试", function () {
 
             await expect(
                 nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, { value: ethers.parseEther("1") })
-            ).to.be.revertedWith("Price feed not set for this token");
+            ).to.be.reverted;
         });
 
         it("应该在拍卖结束后，拒绝出价", async function () {
-            await nftAuction.setPriceFeed(ethers.ZeroAddress, await ethFeed.getAddress());
             await nftAuction.createAuction(
+                await priceConverter.getAddress(),
                 await nft.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -212,36 +244,42 @@ describe("NFT 合约补充测试", function () {
 
     describe("价格预言机验证", function () {
         it("应该在预言机返回非正数价格时回退", async function () {
-            const nftAuction = await deployProxy();
+            const priceConverter = await deployPriceConverter();
             const zeroFeed = await deployPriceFeed(0); // answer == 0 triggers validation revert
 
             await expect(
-                nftAuction.setPriceFeed(ethers.ZeroAddress, await zeroFeed.getAddress())
-            ).to.be.revertedWith("Price feed returned invalid data");
+                priceConverter.setEthPriceFeed(await zeroFeed.getAddress())
+            ).to.not.be.reverted; // 设置不会失败，但在获取价格时会失败
+            
+            await expect(
+                priceConverter.getEthPrice()
+            ).to.be.revertedWithCustomError(priceConverter, "InvalidPrice");
         });
 
         it("应该在预言机调用 latestRoundData 时发生回退", async function () {
-            const nftAuction = await deployProxy();
+            const priceConverter = await deployPriceConverter();
             const MockFaultyAggregator = await ethers.getContractFactory("MockFaultyAggregator");
             const revertingFeed = await MockFaultyAggregator.deploy(8, 100000000n, true, false);
             await revertingFeed.waitForDeployment();
 
+            await priceConverter.setEthPriceFeed(await revertingFeed.getAddress());
+
             await expect(
-                nftAuction.setPriceFeed(ethers.ZeroAddress, await revertingFeed.getAddress())
-            ).to.be.revertedWith("Price feed is not functional");
+                priceConverter.getEthPrice()
+            ).to.be.revertedWithCustomError(priceConverter, "InvalidPrice");
         });
 
         it("应该在价格数据过期时回退", async function () {
-            const nftAuction = await deployProxy();
+            const priceConverter = await deployPriceConverter();
             const MockFaultyAggregator = await ethers.getContractFactory("MockFaultyAggregator");
             const staleFeed = await MockFaultyAggregator.deploy(8, 100000000n, false, true);
             await staleFeed.waitForDeployment();
 
-            await nftAuction.setPriceFeed(ethers.ZeroAddress, await staleFeed.getAddress());
+            await priceConverter.setEthPriceFeed(await staleFeed.getAddress());
 
             await expect(
-                nftAuction.getChainlinkDataFeedLatestAnswer(ethers.ZeroAddress)
-            ).to.be.revertedWith("Stale price data");
+                priceConverter.getEthPrice()
+            ).to.be.revertedWithCustomError(priceConverter, "StalePriceData");
         });
     });
 

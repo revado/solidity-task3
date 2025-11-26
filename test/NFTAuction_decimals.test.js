@@ -4,6 +4,7 @@ import { expect } from "chai";
 
 describe("NFTAuction - 不同精度代币测试", function () {
     let nftAuction;
+    let priceConverter;
     let mockNFT;
     let mockETHUSD;
     let mockDAI;
@@ -33,6 +34,25 @@ describe("NFTAuction - 不同精度代币测试", function () {
         mockWBTCUSD = await MockV3Aggregator.deploy(8, WBTC_PRICE);
         await mockWBTCUSD.waitForDeployment();
 
+        // 部署 PriceConverter
+        const PriceConverter = await ethers.getContractFactory("PriceConverter");
+        priceConverter = await PriceConverter.deploy();
+        await priceConverter.waitForDeployment();
+
+        // 设置价格源
+        await priceConverter.setEthPriceFeed(await mockETHUSD.getAddress());
+
+        // 部署 DAI (18 位小数)
+        const MockERC20 = await ethers.getContractFactory("MockERC20");
+        mockDAI = await MockERC20.deploy("Mock DAI", "DAI", 18);
+        await mockDAI.waitForDeployment();
+        await priceConverter.setTokenPriceFeed(await mockDAI.getAddress(), await mockDAIUSD.getAddress());
+
+        // 部署 WBTC (8 位小数)
+        mockWBTC = await MockERC20.deploy("Mock WBTC", "WBTC", 8);
+        await mockWBTC.waitForDeployment();
+        await priceConverter.setTokenPriceFeed(await mockWBTC.getAddress(), await mockWBTCUSD.getAddress());
+
         // 部署 NFTAuction
         const NFTAuction = await ethers.getContractFactory("NFTAuction");
         const nftAuctionImpl = await NFTAuction.deploy();
@@ -44,20 +64,6 @@ describe("NFTAuction - 不同精度代币测试", function () {
         await proxy.waitForDeployment();
 
         nftAuction = await ethers.getContractAt("NFTAuction", await proxy.getAddress());
-
-        // 设置价格源
-        await nftAuction.setPriceFeed(ethers.ZeroAddress, await mockETHUSD.getAddress());
-
-        // 部署 DAI (18 位小数)
-        const MockERC20 = await ethers.getContractFactory("MockERC20");
-        mockDAI = await MockERC20.deploy("Mock DAI", "DAI", 18);
-        await mockDAI.waitForDeployment();
-        await nftAuction.setPriceFeed(await mockDAI.getAddress(), await mockDAIUSD.getAddress());
-
-        // 部署 WBTC (8 位小数)
-        mockWBTC = await MockERC20.deploy("Mock WBTC", "WBTC", 8);
-        await mockWBTC.waitForDeployment();
-        await nftAuction.setPriceFeed(await mockWBTC.getAddress(), await mockWBTCUSD.getAddress());
 
         // 给测试账户铸造代币
         await mockDAI.mint(bidder1.address, ethers.parseUnits("10000", 18));
@@ -76,6 +82,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
         beforeEach(async function () {
             await mockNFT.approve(await nftAuction.getAddress(), 0);
             await nftAuction.createAuction(
+                await priceConverter.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -129,6 +136,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
         beforeEach(async function () {
             await mockNFT.approve(await nftAuction.getAddress(), 0);
             await nftAuction.createAuction(
+                await priceConverter.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -182,6 +190,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
         beforeEach(async function () {
             await mockNFT.approve(await nftAuction.getAddress(), 0);
             await nftAuction.createAuction(
+                await priceConverter.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -274,6 +283,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
         beforeEach(async function () {
             await mockNFT.approve(await nftAuction.getAddress(), 0);
             await nftAuction.createAuction(
+                await priceConverter.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,
