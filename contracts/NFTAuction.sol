@@ -8,12 +8,12 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import { IPriceConverter } from "./interfaces/IPriceConverter.sol";
+import { IPriceOracleReader } from "./interfaces/IPriceOracleReader.sol";
 
 // NFT 拍卖合约
 contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, ReentrancyGuardUpgradeable {
 	// ============================== 自定义错误 ==============================
-	error InvalidPriceConverterAddress();
+	error InvalidPriceOracleReaderAddress();
 	error InvalidNFTContractAddress();
 	error OnlyNFTOwnerCanCreateAuction();
 	error DurationTooShort();
@@ -59,8 +59,8 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	// 管理员地址
 	address public admin;
 
-	// 价格转化器
-	IPriceConverter public priceConverter;
+	// 价格预言机读取器
+	IPriceOracleReader public priceOracleReader;
 
 	// ============================== 事件 ==============================
 	// 事件：拍卖创建
@@ -71,6 +71,12 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 
 	// 事件：拍卖结束
 	event AuctionEnded(uint256 indexed auctionId, address indexed winner, uint256 finalPrice);
+
+	// ============================== 修饰符 ==============================
+	// 修饰符：竞拍必须正在进行中
+	modifier auctionActive() {
+		_;
+	}
 
 	// ============================== 函数 ==============================
 	/**
@@ -91,14 +97,14 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	 * @param _duration 拍卖持续时间
 	 */
 	function createAuction(
-		address _priceConverter,
+		address _priceOracleReader,
 		address _nftContract,
 		uint256 _tokenId,
 		uint256 _startPrice,
 		uint256 _duration
 	) public {
-		if (_priceConverter == address(0)) {
-			revert InvalidPriceConverterAddress();
+		if (_priceOracleReader == address(0)) {
+			revert InvalidPriceOracleReaderAddress();
 		}
 		if (_nftContract == address(0)) {
 			revert InvalidNFTContractAddress();
@@ -119,7 +125,7 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 		IERC721(_nftContract).safeTransferFrom(msg.sender, address(this), _tokenId);
 
 		uint256 auctionId = nextAuctionId;
-		priceConverter = IPriceConverter(_priceConverter);
+		priceOracleReader = IPriceOracleReader(_priceOracleReader);
 		// 创建拍卖
 		auctions[auctionId] = Auction({
 			ended: false,
@@ -149,15 +155,15 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 		if (seller == address(0)) {
 			revert AuctionDoesNotExist();
 		}
+		// 卖家不能竞拍自己的拍卖
+		if (msg.sender == seller) {
+			revert SellerCannotBidOnOwnAuction();
+		}
 		if (auction.ended) {
 			revert AuctionAlreadyEnded();
 		}
 		if (auction.startTime + auction.duration <= block.timestamp) {
 			revert AuctionExpired();
-		}
-		// 卖家不能竞拍自己的拍卖
-		if (msg.sender == seller) {
-			revert SellerCannotBidOnOwnAuction();
 		}
 	}
 
@@ -172,7 +178,7 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 		}
 
 		bidAmount = msg.value;
-		payValueInUSD = priceConverter.getEthValueInUSD(bidAmount);
+		payValueInUSD = priceOracleReader.getEthValueInUSD(bidAmount);
 	}
 
 	/**
@@ -191,7 +197,7 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 		}
 
 		bidAmount = amount;
-		payValueInUSD = priceConverter.getTokenValueInUSD(tokenAddress, amount);
+		payValueInUSD = priceOracleReader.getTokenValueInUSD(tokenAddress, amount);
 	}
 
 	/**
@@ -203,11 +209,11 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	function _convertToUSDValue(address tokenAddress, uint256 tokenAmount) private view returns (uint256) {
 		// ETH
 		if (tokenAddress == address(0)) {
-			return priceConverter.getEthValueInUSD(tokenAmount);
+			return priceOracleReader.getEthValueInUSD(tokenAmount);
 		}
 
 		// ERC-20 代币
-		return priceConverter.getTokenValueInUSD(tokenAddress, tokenAmount);
+		return priceOracleReader.getTokenValueInUSD(tokenAddress, tokenAmount);
 	}
 
 	/**

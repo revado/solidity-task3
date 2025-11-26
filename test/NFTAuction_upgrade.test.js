@@ -4,8 +4,7 @@ const { ethers, upgrades } = hre;
 
 describe("NFTAuction 升级测试", function () {
 	let nftAuction;
-	let nftAuctionV2;
-	let priceConverter;
+	let priceOracleReader;
 	let admin;
 	let user1;
 	let user2;
@@ -28,12 +27,12 @@ describe("NFTAuction 升级测试", function () {
 		return mockPriceFeed;
 	}
 
-	// 部署 PriceConverter
-	async function deployPriceConverter() {
-		const PriceConverter = await ethers.getContractFactory("PriceConverter");
-		const converter = await PriceConverter.deploy();
-		await converter.waitForDeployment();
-		return converter;
+	// 部署 PriceOracleReader
+	async function deployPriceOracleReader() {
+		const PriceOracleReader = await ethers.getContractFactory("PriceOracleReader");
+		const reader = await PriceOracleReader.deploy();
+		await reader.waitForDeployment();
+		return reader;
 	}
 
 	beforeEach(async function () {
@@ -57,9 +56,9 @@ describe("NFTAuction 升级测试", function () {
 		// 部署 Mock Price Feed (ETH价格设为 $2000)
 		mockPriceFeed = await deployMockPriceFeed(200000000000); // $2000 * 10^8
 
-		// 部署 PriceConverter 并设置价格源
-		priceConverter = await deployPriceConverter();
-		await priceConverter.connect(admin).setEthPriceFeed(await mockPriceFeed.getAddress());
+		// 部署 PriceOracleReader 并设置价格源
+		priceOracleReader = await deployPriceOracleReader();
+		await priceOracleReader.connect(admin).setEthPriceFeed(await mockPriceFeed.getAddress());
 	});
 
 	describe("1. 基本升级功能", function () {
@@ -91,7 +90,7 @@ describe("NFTAuction 升级测试", function () {
 
 			// 创建拍卖
 			await nftAuction.connect(user1).createAuction(
-				await priceConverter.getAddress(),
+				await priceOracleReader.getAddress(),
 				await mockNFT.getAddress(),
 				tokenId,
 				startPrice,
@@ -142,7 +141,7 @@ describe("NFTAuction 升级测试", function () {
 
 			await expect(
 				upgraded.connect(user1).createAuction(
-					await priceConverter.getAddress(),
+					await priceOracleReader.getAddress(),
 					await mockNFT.getAddress(),
 					tokenId,
 					startPrice,
@@ -188,7 +187,7 @@ describe("NFTAuction 升级测试", function () {
 			const tokenId = 0;
 			await mockNFT.connect(user1).approve(await nftAuction.getAddress(), tokenId);
 			await nftAuction.connect(user1).createAuction(
-				await priceConverter.getAddress(),
+				await priceOracleReader.getAddress(),
 				await mockNFT.getAddress(),
 				tokenId,
 				startPrice,
@@ -228,7 +227,7 @@ describe("NFTAuction 升级测试", function () {
 				await mockNFT.mint(user1.address);
 				await mockNFT.connect(user1).approve(await nftAuction.getAddress(), i);
 				await nftAuction.connect(user1).createAuction(
-					await priceConverter.getAddress(),
+					await priceOracleReader.getAddress(),
 					await mockNFT.getAddress(),
 					i,
 					ethers.parseUnits("1000", 8),
@@ -302,7 +301,7 @@ describe("NFTAuction 升级测试", function () {
 			await mockNFT.mint(user1.address);
 			await mockNFT.connect(user1).approve(await nftAuction.getAddress(), 0);
 			await nftAuction.connect(user1).createAuction(
-				await priceConverter.getAddress(),
+				await priceOracleReader.getAddress(),
 				await mockNFT.getAddress(),
 				0,
 				ethers.parseUnits("1000", 8),
@@ -321,7 +320,7 @@ describe("NFTAuction 升级测试", function () {
 			await mockNFT.mint(user1.address);
 			await mockNFT.connect(user1).approve(await upgraded.getAddress(), 1);
 			await upgraded.connect(user1).createAuction(
-				await priceConverter.getAddress(),
+				await priceOracleReader.getAddress(),
 				await mockNFT.getAddress(),
 				1,
 				ethers.parseUnits("2000", 8),

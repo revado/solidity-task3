@@ -5,9 +5,9 @@ import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/inte
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
-import { IPriceConverter } from "./interfaces/IPriceConverter.sol";
+import { IPriceOracleReader } from "./interfaces/IPriceOracleReader.sol";
 
-contract PriceConverter is IPriceConverter, Ownable {
+contract PriceOracleReader is IPriceOracleReader, Ownable {
 	// ============================== 错误 ==============================
 	error InvalidEthPriceFeed();
 	error InvalidTokenAddress();
@@ -68,7 +68,7 @@ contract PriceConverter is IPriceConverter, Ownable {
 	 * @notice 获取 ETH 当前价格
 	 * @return USD 价格（8 位小数）
 	 */
-	function getEthPrice() public view override returns (uint256) {
+	function getEthPrice() public view returns (uint256) {
 		return _getPrice(ethPriceFeed);
 	}
 
@@ -77,7 +77,7 @@ contract PriceConverter is IPriceConverter, Ownable {
 	 * @param tokenAddress 代币合约地址
 	 * @return USD 价格（8 位小数）
 	 */
-	function getTokenPrice(address tokenAddress) public view override returns (uint256) {
+	function getTokenPrice(address tokenAddress) public view returns (uint256) {
 		address priceFeed = priceFeeds[tokenAddress];
 		return _getPrice(priceFeed);
 	}
@@ -88,8 +88,6 @@ contract PriceConverter is IPriceConverter, Ownable {
 	 * @return 最新 USD 价格（8 位小数）
 	 */
 	function _getPrice(address priceFeed) internal view returns (uint256) {
-		AggregatorV3Interface _priceFeed = AggregatorV3Interface(priceFeed);
-
 		try AggregatorV3Interface(priceFeed).latestRoundData() returns (
 			uint80 roundId,
 			int256 answer,

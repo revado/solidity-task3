@@ -5,7 +5,7 @@ import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
     let nftAuction;
-    let priceConverter;
+    let priceOracleReader;
     let mockNFT;
     let mockETHUSD;
     let mockUSDCUSD;
@@ -33,13 +33,13 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         mockUSDCUSD = await MockV3Aggregator.deploy(8, USDC_PRICE);
         await mockUSDCUSD.waitForDeployment();
 
-        // 2. 部署 PriceConverter
-        const PriceConverter = await ethers.getContractFactory("PriceConverter");
-        priceConverter = await PriceConverter.deploy();
-        await priceConverter.waitForDeployment();
+        // 2. 部署 PriceOracleReader
+        const PriceOracleReader = await ethers.getContractFactory("PriceOracleReader");
+        priceOracleReader = await PriceOracleReader.deploy();
+        await priceOracleReader.waitForDeployment();
 
         // 3. 设置价格源
-        await priceConverter.setEthPriceFeed(await mockETHUSD.getAddress());
+        await priceOracleReader.setEthPriceFeed(await mockETHUSD.getAddress());
 
         // 4. 部署 Mock USDC 代币
         const MockERC20 = await ethers.getContractFactory("MockERC20");
@@ -47,7 +47,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         await mockUSDC.waitForDeployment();
 
         // 设置 USDC 价格源
-        await priceConverter.setTokenPriceFeed(
+        await priceOracleReader.setTokenPriceFeed(
             await mockUSDC.getAddress(),
             await mockUSDCUSD.getAddress()
         );
@@ -80,31 +80,31 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
 
     describe("价格源设置和验证", function () {
         it("应该正确设置 ETH 价格源", async function () {
-            const price = await priceConverter.getEthPrice();
+            const price = await priceOracleReader.getEthPrice();
             expect(price).to.equal(ETH_PRICE);
         });
 
         it("应该正确设置 USDC 价格源", async function () {
-            const price = await priceConverter.getTokenPrice(await mockUSDC.getAddress());
+            const price = await priceOracleReader.getTokenPrice(await mockUSDC.getAddress());
             expect(price).to.equal(USDC_PRICE);
         });
 
         it("非 owner 不能设置价格源", async function () {
             await expect(
-                priceConverter.connect(bidder1).setEthPriceFeed(await mockETHUSD.getAddress())
-            ).to.be.revertedWithCustomError(priceConverter, "OwnableUnauthorizedAccount");
+                priceOracleReader.connect(bidder1).setEthPriceFeed(await mockETHUSD.getAddress())
+            ).to.be.revertedWithCustomError(priceOracleReader, "OwnableUnauthorizedAccount");
         });
 
         it("不能设置零地址作为价格源", async function () {
             await expect(
-                priceConverter.setEthPriceFeed(ethers.ZeroAddress)
-            ).to.be.revertedWithCustomError(priceConverter, "InvalidEthPriceFeed");
+                priceOracleReader.setEthPriceFeed(ethers.ZeroAddress)
+            ).to.be.revertedWithCustomError(priceOracleReader, "InvalidEthPriceFeed");
         });
 
         it("查询未设置的代币价格源应该失败", async function () {
             const randomToken = "0x1234567890123456789012345678901234567890";
             await expect(
-                priceConverter.getTokenPrice(randomToken)
+                priceOracleReader.getTokenPrice(randomToken)
             ).to.be.reverted;
         });
     });
@@ -115,7 +115,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
 
             await expect(
                 nftAuction.createAuction(
-                    await priceConverter.getAddress(),
+                    await priceOracleReader.getAddress(),
                     await mockNFT.getAddress(),
                     0,
                     START_PRICE_USD,
@@ -134,7 +134,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
 
             await expect(
                 nftAuction.connect(bidder1).createAuction(
-                    await priceConverter.getAddress(),
+                    await priceOracleReader.getAddress(),
                     await mockNFT.getAddress(),
                     0,
                     START_PRICE_USD,
@@ -148,7 +148,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
 
             await expect(
                 nftAuction.createAuction(
-                    await priceConverter.getAddress(),
+                    await priceOracleReader.getAddress(),
                     await mockNFT.getAddress(),
                     0,
                     0, // 无效的起始价
@@ -162,7 +162,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         beforeEach(async function () {
             await mockNFT.approve(nftAuctionAddress, 0);
             await nftAuction.createAuction(
-                await priceConverter.getAddress(),
+                await priceOracleReader.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -243,7 +243,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         beforeEach(async function () {
             await mockNFT.approve(nftAuctionAddress, 0);
             await nftAuction.createAuction(
-                await priceConverter.getAddress(),
+                await priceOracleReader.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -302,7 +302,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         beforeEach(async function () {
             await mockNFT.approve(nftAuctionAddress, 0);
             await nftAuction.createAuction(
-                await priceConverter.getAddress(),
+                await priceOracleReader.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -373,7 +373,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         beforeEach(async function () {
             await mockNFT.approve(nftAuctionAddress, 0);
             await nftAuction.createAuction(
-                await priceConverter.getAddress(),
+                await priceOracleReader.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -465,7 +465,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         it("负价格应该被拒绝", async function () {
             await mockNFT.approve(nftAuctionAddress, 0);
             await nftAuction.createAuction(
-                await priceConverter.getAddress(),
+                await priceOracleReader.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,
@@ -479,7 +479,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
                 nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
                     value: ethers.parseEther("0.5")
                 })
-            ).to.be.revertedWithCustomError(priceConverter, "InvalidPrice");
+            ).to.be.revertedWithCustomError(priceOracleReader, "InvalidPrice");
         });
     });
 
@@ -487,7 +487,7 @@ describe("使用 Chainlink 价格预言机的 NFT 拍卖测试", function () {
         beforeEach(async function () {
             await mockNFT.approve(nftAuctionAddress, 0);
             await nftAuction.createAuction(
-                await priceConverter.getAddress(),
+                await priceOracleReader.getAddress(),
                 await mockNFT.getAddress(),
                 0,
                 START_PRICE_USD,
