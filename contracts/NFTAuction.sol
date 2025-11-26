@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.28;
+pragma solidity ^0.8;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -7,12 +7,11 @@ import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+
+import { IPriceConverter } from "./interfaces/IPriceConverter.sol";
 
 // NFT 拍卖合约
 contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, ReentrancyGuardUpgradeable {
-	// ============================== 状态变量 ==============================
 	// 拍卖信息
 	struct Auction {
 		bool ended; // 拍卖是否结束
@@ -31,6 +30,7 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 		uint256 highestBid; // 最高出价
 	}
 
+	// ============================== 状态变量 ==============================
 	// NFT ID => 拍卖信息
 	mapping(uint256 => Auction) public auctions;
 
@@ -40,8 +40,8 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	// 管理员地址
 	address public admin;
 
-	// 资产类型 => 价格 Feed
-	mapping(address => AggregatorV3Interface) public priceFeeds;
+	// 价格转化器
+	IPriceConverter public priceConverter;
 
 	// ============================== 事件 ==============================
 	// 事件：拍卖创建
@@ -64,59 +64,59 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 		admin = msg.sender;
 	}
 
-	/**
-	 * @notice 设置不同资产价格源
-	 * @param tokenAddress 代币地址
-	 * @param priceFeed 价格源地址
-	 */
-	function setPriceFeed(address tokenAddress, address priceFeed) public {
-		// 只有管理员可以设置价格源
-		require(msg.sender == admin, "Only admin can set price feed");
-		// 验证价格源地址有效
-		require(priceFeed != address(0), "Invalid price feed address");
+	// /**
+	//  * @notice 设置不同资产价格源
+	//  * @param tokenAddress 代币地址
+	//  * @param priceFeed 价格源地址
+	//  */
+	// function setPriceFeed(address tokenAddress, address priceFeed) public {
+	// 	// 只有管理员可以设置价格源
+	// 	require(msg.sender == admin, "Only admin can set price feed");
+	// 	// 验证价格源地址有效
+	// 	require(priceFeed != address(0), "Invalid price feed address");
 
-		priceFeeds[tokenAddress] = AggregatorV3Interface(priceFeed);
+	// 	priceFeeds[tokenAddress] = AggregatorV3Interface(priceFeed);
 
-		try AggregatorV3Interface(priceFeed).latestRoundData() returns (
-			uint80,
-			int256 answer,
-			uint256,
-			uint256,
-			uint80
-		) {
-			require(answer > 0, "Price feed returned invalid data");
-		} catch {
-			revert("Price feed is not functional");
-		}
-	}
+	// 	try AggregatorV3Interface(priceFeed).latestRoundData() returns (
+	// 		uint80,
+	// 		int256 answer,
+	// 		uint256,
+	// 		uint256,
+	// 		uint80
+	// 	) {
+	// 		require(answer > 0, "Price feed returned invalid data");
+	// 	} catch {
+	// 		revert("Price feed is not functional");
+	// 	}
+	// }
 
-	/**
-	 * @notice 获取 Chainlink 价格源的最新价格
-	 * @param tokenAddress 代币地址
-	 * @return answer 最新价格
-	 */
-	function getChainlinkDataFeedLatestAnswer(address tokenAddress) public view returns (int256) {
-		AggregatorV3Interface priceFeed = priceFeeds[tokenAddress];
+	// /**
+	//  * @notice 获取 Chainlink 价格源的最新价格
+	//  * @param tokenAddress 代币地址
+	//  * @return answer 最新价格
+	//  */
+	// function getChainlinkDataFeedLatestAnswer(address tokenAddress) public view returns (int256) {
+	// 	AggregatorV3Interface priceFeed = priceFeeds[tokenAddress];
 
-		// 价格源需要提前设置
-		require(address(priceFeed) != address(0), "Price feed not set for this token");
+	// 	// 价格源需要提前设置
+	// 	require(address(priceFeed) != address(0), "Price feed not set for this token");
 
-		(
-			uint80 roundId,
-			int256 answer,
-			/* uint256 startedAt */,
-			/* uint256 updatedAt */,
-			uint80 answeredInRound
-		) = priceFeed.latestRoundData();
+	// 	(
+	// 		uint80 roundId,
+	// 		int256 answer,
+	// 		/* uint256 startedAt */,
+	// 		/* uint256 updatedAt */,
+	// 		uint80 answeredInRound
+	// 	) = priceFeed.latestRoundData();
 
-		// 验证价格是否有效
-		require(answer > 0, "Invalid price from feed");
+	// 	// 验证价格是否有效
+	// 	require(answer > 0, "Invalid price from feed");
 
-		// 检查 found 是否完整，防止数据不一致
-		require(answeredInRound == roundId, "Stale price data");
+	// 	// 检查 found 是否完整，防止数据不一致
+	// 	require(answeredInRound == roundId, "Stale price data");
 
-		return answer;
-	}
+	// 	return answer;
+	// }
 
 	/**
 	 * @notice 创建拍卖，允许任何 NFT 所有者创建拍卖
@@ -125,7 +125,14 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	 * @param _startPrice 起始价格
 	 * @param _duration 拍卖持续时间
 	 */
-	function createAuction(address _nftContract, uint256 _tokenId, uint256 _startPrice, uint256 _duration) public {
+	function createAuction(
+		address _priceConverter,
+		address _nftContract,
+		uint256 _tokenId,
+		uint256 _startPrice,
+		uint256 _duration
+	) public {
+		require(_priceConverter != address(0), "Invalid price converter address");
 		require(_nftContract != address(0), "Invalid NFT contract address");
 		// 验证调用者是 NFT 所有者
 		require(IERC721(_nftContract).ownerOf(_tokenId) == msg.sender, "Only NFT owner can create auction");
@@ -137,6 +144,7 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 		IERC721(_nftContract).safeTransferFrom(msg.sender, address(this), _tokenId);
 
 		uint256 auctionId = nextAuctionId;
+		priceConverter = IPriceConverter(_priceConverter);
 		// 创建拍卖
 		auctions[auctionId] = Auction({
 			ended: false,
@@ -154,9 +162,7 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 		// 触发拍卖创建事件
 		emit AuctionCreated(auctionId, msg.sender, _startPrice);
 
-		unchecked {
-			++nextAuctionId;
-		}
+		++nextAuctionId;
 	}
 
 	/**
@@ -174,75 +180,62 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 
 	/**
 	 * @notice 计算 ETH 竞价的美元价值
-	 * @return payValue 美元价值（8 位小数）
+	 * @return payValueInUSD 美元价值（8 位小数）
 	 * @return bidAmount ETH 数量
 	 */
-	function _calculateETHBidValue() private view returns (uint256 payValue, uint256 bidAmount) {
+	function _calculateETHBidValue() private view returns (uint256 payValueInUSD, uint256 bidAmount) {
 		require(msg.value > 0, "Must send ETH");
-		// ETH 价格是 8 位小数，ETH 数量是 18 位小数
-		// payValue = (ETH数量 * ETH价格) / 10^18，结果是 8 位小数的美元
-		int256 ethPrice = getChainlinkDataFeedLatestAnswer(address(0));
-		payValue = (msg.value * uint256(ethPrice)) / 1e18;
+
 		bidAmount = msg.value;
+		payValueInUSD = priceConverter.getEthValueInUSD(bidAmount);
 	}
 
 	/**
 	 * @notice 计算 ERC-20 竞价的美元价值
 	 * @param tokenAddress 代币地址
 	 * @param amount 代币数量
-	 * @return payValue 美元价值（8位小数）
+	 * @return payValueInUSD 美元价值（8位小数）
  	 * @return bidAmount 代币数量
 	 */
-	function _calculateERC20BidValue(address tokenAddress, uint256 amount) private view returns (uint256 payValue, uint256 bidAmount) {
+	function _calculateERC20BidValue(address tokenAddress, uint256 amount) private view returns (uint256 payValueInUSD, uint256 bidAmount) {
 		require(amount > 0, "Amount must be greater than 0");
 		require(msg.value == 0, "ETH not accepted for ERC-20 bids");
 
-		// 动态获取代币精度
-		uint8 decimals = IERC20Metadata(tokenAddress).decimals();
-
-		// ERC-20 价格是 8 位小数
-		// payValue = (代币数量 * 代币价格) / 10^decimals，结果是 8 位小数的美元
-		int256 tokenPrice = getChainlinkDataFeedLatestAnswer(tokenAddress);
-		payValue = (amount * uint256(tokenPrice)) / (10 ** decimals);
 		bidAmount = amount;
+		payValueInUSD = priceConverter.getTokenValueInUSD(tokenAddress, amount);
 	}
 
 	/**
-	 * @dev 将代币金额转换为美元价值
+	 * @dev 将代币数量转换为美元价值
 	 * @param tokenAddress 代币地址（address(0) 表示 ETH）
 	 * @param tokenAmount 代币数量
 	 * @return 美元价值（8位小数）
 	 */
 	function _convertToUSDValue(address tokenAddress, uint256 tokenAmount) private view returns (uint256) {
+		// ETH
 		if (tokenAddress == address(0)) {
-			// ETH
-			int256 ethPrice = getChainlinkDataFeedLatestAnswer(address(0));
-			return (tokenAmount * uint256(ethPrice)) / 1e18;
-		} else {
-			// ERC-20 代币
-			uint8 decimals = IERC20Metadata(tokenAddress).decimals();
-			int256 tokenPrice = getChainlinkDataFeedLatestAnswer(tokenAddress);
-			return (tokenAmount * uint256(tokenPrice)) / (10 ** decimals);
+			return priceConverter.getEthValueInUSD(tokenAmount);
 		}
+
+		// ERC-20 代币
+		return priceConverter.getTokenValueInUSD(tokenAddress, tokenAmount);
 	}
 
 	/**
 	 * @notice 验证出价金额是否足够
 	 * @param auction 拍卖信息
-	 * @param payValue 当前出价的美元价值
+	 * @param payValueInUSD 当前出价的美元价值
 	 * @param currentTokenAddress 当前最高出价使用的代币
 	 * @param currentHighestBid 当前最高出价金额
 	 */
-	function _validateBidAmount(Auction storage auction, uint256 payValue, address currentTokenAddress, uint256 currentHighestBid) private view {
+	function _validateBidAmount(Auction storage auction, uint256 payValueInUSD, address currentTokenAddress, uint256 currentHighestBid) private view {
 		if (auction.highestBidder == address(0)) {
-			// 第一次出价，与起始价格比较
-			// startPrice 是 8 位小数的美元价值
-			require(payValue >= auction.startPrice, "Bid must be at least the starting price");
+			// 第一次出价，与起始价格比较。startPrice 是 8 位小数的美元价值
+			require(payValueInUSD >= auction.startPrice, "Bid must be at least the starting price");
 		} else {
-			// 后续出价，与当前最高价比较
-			// 需要将前一次出价转换为美元价值
-			uint256 highestBidValue = _convertToUSDValue(currentTokenAddress, currentHighestBid);
-			require(payValue > highestBidValue, "Bid must be higher than the current highest bid");
+			// 后续出价，与当前最高价比较。需要将前一次出价转换为美元价值
+			uint256 highestBidValueInUSD = _convertToUSDValue(currentTokenAddress, currentHighestBid);
+			require(payValueInUSD > highestBidValueInUSD, "Bid must be higher than the current highest bid");
 		}
 	}
 
@@ -394,5 +387,21 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	 */
 	function _authorizeUpgrade(address /* newImplementation */) internal override {
 		require(msg.sender == admin, "Only admin can upgrade");
+	}
+
+	/**
+	 * @notice 获取拍卖剩余时间（秒）
+	 * @return 剩余时间（秒）
+	 */
+	function getRemainingTime(uint256 _auctionId) public view returns (uint256) {
+		Auction storage auction = auctions[_auctionId];
+		if (auction.ended) {
+			return 0;
+		}
+		uint256 endTime = auction.startTime + auction.duration;
+		if (block.timestamp > endTime) {
+			return 0;
+		}
+		return endTime - block.timestamp;
 	}
 }
