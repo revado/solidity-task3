@@ -72,12 +72,6 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	// 事件：拍卖结束
 	event AuctionEnded(uint256 indexed auctionId, address indexed winner, uint256 finalPrice);
 
-	// ============================== 修饰符 ==============================
-	// 修饰符：竞拍必须正在进行中
-	modifier auctionActive() {
-		_;
-	}
-
 	// ============================== 函数 ==============================
 	/**
 	 * @notice 初始化函数
