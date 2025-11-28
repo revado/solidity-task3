@@ -4,14 +4,17 @@ pragma solidity ^0.8;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/utils/ERC721HolderUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import { IPriceOracleReader } from "./interfaces/IPriceOracleReader.sol";
+import { IFeePolicy } from "./interfaces/IFeePolicy.sol";
 
 // NFT 拍卖合约
-contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, ReentrancyGuardUpgradeable {
+contract NFTAuction is Initializable, ERC721HolderUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
+	using SafeERC20 for IERC20;
 	// ============================== 自定义错误 ==============================
 	error InvalidPriceOracleReaderAddress();
 	error InvalidNFTContractAddress();
@@ -29,6 +32,8 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	error AuctionHasNotEndedYet();
 	error OnlySellerOrAdminCanEndAuction();
 	error OnlyAdminCanUpgrade();
+	error FeeExceedsProceeds();
+	error ETHTransferFailed();
 
 	// 拍卖信息
 	struct Auction {
@@ -59,6 +64,12 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	// 管理员地址
 	address public admin;
 
+	// 费用策略合约
+	IFeePolicy public feePolicy;
+
+	// 累计手续费（token => amount），token 为 address(0) 表示 ETH
+	mapping(address => uint256) public accruedFees;
+
 	// ============================== 事件 ==============================
 	// 事件：拍卖创建
 	event AuctionCreated(uint256 indexed auctionId, address indexed seller, uint256 startPrice);
@@ -69,12 +80,18 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	// 事件：拍卖结束
 	event AuctionEnded(uint256 indexed auctionId, address indexed winner, uint256 finalPrice);
 
+	// 事件：手续费策略/提取
+	event FeePolicyUpdated(address indexed newPolicy);
+	event FeeAccrued(uint256 indexed auctionId, address indexed token, address indexed recipient, uint256 amount);
+	event FeeWithdrawn(address indexed token, address indexed to, uint256 amount);
+
 	// ============================== 函数 ==============================
 	/**
 	 * @notice 初始化函数
 	 * @dev 初始化函数，只能被管理员调用
 	 */
 	function initialize() initializer public {
+		__ERC721Holder_init();
 		__UUPSUpgradeable_init();
 		__ReentrancyGuard_init();
 		admin = msg.sender;
@@ -131,10 +148,10 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 			highestBid: 0
 		});
 
+		++nextAuctionId;
+
 		// 触发拍卖创建事件
 		emit AuctionCreated(auctionId, msg.sender, _startPrice);
-
-		++nextAuctionId;
 	}
 
 	/**
@@ -223,25 +240,59 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	function _validateBidAmount(IPriceOracleReader oracle, Auction storage auction, uint256 payValueInUSD, address currentTokenAddress, uint256 currentHighestBid) private view {
 		if (auction.highestBidder == address(0)) {
 			// 第一次出价，与起始价格比较。startPrice 是 8 位小数的美元价值
-			if (payValueInUSD < auction.startPrice) revert BidMustBeAtLeastStartingPrice();
+			if (payValueInUSD < auction.startPrice) {
+				revert BidMustBeAtLeastStartingPrice();
+			}
 		} else {
 			// 后续出价，与当前最高价比较。需要将前一次出价转换为美元价值
 			uint256 highestBidValueInUSD = _convertToUSDValue(oracle, currentTokenAddress, currentHighestBid);
-			if (payValueInUSD <= highestBidValueInUSD) revert BidMustBeHigherThanCurrentHighestBid();
+			if (payValueInUSD <= highestBidValueInUSD) {
+				revert BidMustBeHigherThanCurrentHighestBid();
+			}
 		}
 	}
 
 	/**
-	 * @notice 转移竞价资金到合约
-	 * @param tokenAddress 代币地址（address(0) 表示 ETH）
+	 * @notice 计算手续费
+	 * @param auctionId 拍卖 ID
+	 * @param seller 卖家地址
+	 * @param token 代币地址
+	 * @param grossAmount 成交总额
+	 * @return fee 手续费金额
+	 * @return recipient 手续费归集地址
+	 */
+	function _computeFee(uint256 auctionId, address seller, address token, uint256 grossAmount) private view returns (uint256 fee, address recipient) {
+		IFeePolicy policy = feePolicy;
+		if (address(policy) == address(0)) {
+			return (0, address(0));
+		}
+		(fee, recipient) = policy.computeFee(auctionId, seller, token, grossAmount);
+		if (fee > grossAmount) {
+			revert FeeExceedsProceeds();
+		}
+		if (recipient == address(0)) {
+			recipient = admin;
+		}
+	}
+
+	/**
+	 * @notice 转移资金
+	 * @param token 代币地址
+	 * @param to 接收地址
 	 * @param amount 金额
 	 */
-	function _transferBidAmount(address tokenAddress, uint256 amount) private {
-		if (tokenAddress != address(0)) {
-			// 把代币从用户（买家）转移到拍卖合约中托管
-			IERC20(tokenAddress).transferFrom(msg.sender, address(this), amount);
+	function _transferOut(address token, address to, uint256 amount) private {
+		if (amount == 0) {
+			return;
 		}
-		// ETH 已经通过 msg.value 发送，无需额外操作
+		if (token == address(0)) {
+			(bool ok, ) = payable(to).call{ value: amount }("");
+			if (!ok) {
+				revert ETHTransferFailed();
+			}
+		} else {
+			IERC20(token).safeTransfer(to, amount);
+		}
 	}
 
 	/**
@@ -255,17 +306,12 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 			return;
 		}
 
-		if (previousTokenAddress == address(0)) {
-			// 退回之前的 ETH
-			payable(previousBidder).transfer(previousBid);
-		} else {
-			// 退回之前的 ERC-20 代币
-			IERC20(previousTokenAddress).transfer(previousBidder, previousBid);
-		}
+		_transferOut(previousTokenAddress, previousBidder, previousBid);
 	}
 
 	/**
 	 * @notice 使用 ETH 竞价
+	 * @param _auctionId 拍卖 ID
 	 */
 	function placeBidETH(uint256 _auctionId) public payable nonReentrant {
 		Auction storage auction = auctions[_auctionId];
@@ -296,6 +342,9 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 
 	/**
 	 * @notice 使用 ERC-20 代币竞价
+	 * @param _auctionId 拍卖 ID
+	 * @param _tokenAddress 代币地址
+	 * @param amount 代币数量
 	 */
 	function placeBidToken(uint256 _auctionId, address _tokenAddress, uint256 amount) public nonReentrant {
 		Auction storage auction = auctions[_auctionId];
@@ -313,7 +362,7 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 		address previousTokenAddress = auction.tokenAddress;
 
 		// 把代币从用户（买家）转移到拍卖合约中托管
-		IERC20(_tokenAddress).transferFrom(msg.sender, address(this), amount);
+		IERC20(_tokenAddress).safeTransferFrom(msg.sender, address(this), amount);
 
 		// 先更新拍卖状态
 		auction.tokenAddress = _tokenAddress;
@@ -327,10 +376,47 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	}
 
 	/**
+	 * @notice 设置手续费策略（仅管理员）
+	 * @param _policy 手续费策略地址
+	 */
+	function setFeePolicy(address _policy) external {
+		if (msg.sender != admin) {
+			revert OnlyAdminCanUpgrade();
+		}
+		feePolicy = IFeePolicy(_policy);
+		emit FeePolicyUpdated(_policy);
+	}
+
+	/**
+	 * @notice 管理员提取累计手续费
+	 * @param token 代币地址
+	 * @param to 接收地址
+	 * @param amount 金额
+	 */
+	function withdrawFees(address token, address to, uint256 amount) external nonReentrant {
+		if (msg.sender != admin) {
+			revert OnlyAdminCanUpgrade();
+		}
+		if (to == address(0)) {
+			revert InvalidNFTContractAddress();
+		}
+		uint256 balance = accruedFees[token];
+		if (amount == 0) {
+			revert AmountMustBeGreaterThanZero();
+		}
+		if (amount > balance) {
+			revert FeeExceedsProceeds();
+		}
+		accruedFees[token] = balance - amount;
+		_transferOut(token, to, amount);
+		emit FeeWithdrawn(token, to, amount);
+	}
+
+	/**
 	 * @notice 结束拍卖
 	 * @param _auctionId 拍卖 ID
 	 */
-	function endAuction(uint256 _auctionId) external {
+	function endAuction(uint256 _auctionId) external nonReentrant {
 		Auction storage auction = auctions[_auctionId];
 		if (auction.ended) {
 			revert AuctionAlreadyEnded();
@@ -356,29 +442,22 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 			// 将 NFT 转给最高出价者
 			IERC721(auction.nftContract).safeTransferFrom(address(this), highestBidder, auction.tokenId);
 
-			// 将拍卖所得转给卖家
-			if (tokenAddress == address(0)) {
-				payable(auction.seller).transfer(highestBid);
-			} else {
-				IERC20(tokenAddress).transfer(auction.seller, highestBid);
+			// 计算手续费（按策略）
+			(uint256 feeAmount, address feeReceiver) = _computeFee(_auctionId, auction.seller, tokenAddress, highestBid);
+			uint256 sellerAmount = highestBid - feeAmount;
+
+			// 卖家结算
+			_transferOut(tokenAddress, auction.seller, sellerAmount);
+
+			// 累计手续费，等待管理员提取
+			if (feeAmount > 0) {
+				accruedFees[tokenAddress] += feeAmount;
+				emit FeeAccrued(_auctionId, tokenAddress, feeReceiver, feeAmount);
 			}
 		}
 
 		emit AuctionEnded(_auctionId, highestBidder, highestBid);
 	}
-
-	/**
-	 * @notice 实现 IERC721Receiver 接口，允许合约接收 NFT
-	 * @return bytes4 返回值
-	 */
-    function onERC721Received(
-        address /* operator */,
-        address /* from */,
-        uint256 /* tokenId */,
-        bytes calldata /* data */
-    ) external pure override returns (bytes4) {
-        return this.onERC721Received.selector;
-    }
 
 	/**
 	 * @notice 拒绝直接接收 ETH，要求使用 placeBidETH() 或者 placeBidToken() 函数
