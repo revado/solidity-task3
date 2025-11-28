@@ -48,6 +48,20 @@ async function deployPriceOracleReader() {
   return reader;
 }
 
+async function deployMockFeePolicy(feeAmount, recipient) {
+  const MockFeePolicy = await ethers.getContractFactory("MockFeePolicy");
+  const policy = await MockFeePolicy.deploy(feeAmount, recipient);
+  await policy.waitForDeployment();
+  return policy;
+}
+
+async function deployRevertingReceiver() {
+  const RevertingReceiver = await ethers.getContractFactory("RevertingReceiver");
+  const receiver = await RevertingReceiver.deploy();
+  await receiver.waitForDeployment();
+  return receiver;
+}
+
 describe("NFT 合约补充测试", function () {
   let owner, bidder1, bidder2;
 
@@ -132,7 +146,7 @@ describe("NFT 合约补充测试", function () {
     it("应该在拍卖不存在时回退", async function () {
       await expect(
         nftAuction.placeBidETH(999, { value: ethers.parseEther("1") })
-      ).to.be.revertedWithCustomError(nftAuction, "AuctionDoesNotExist");
+      ).to.be.revertedWithCustomError(nftAuction, "AuctionNotExist");
     });
 
     it("应该在卖家竞拍自己的拍卖时回退", async function () {
@@ -295,6 +309,21 @@ describe("NFT 合约补充测试", function () {
       ).to.be.revertedWith("Function does not exist");
     });
   });
+  describe("拍卖详情查询", function () {
+    it("getAuctionDetail 应该在拍卖不存在时回退", async function () {
+      const nftAuction = await deployProxy();
+      await expect(
+        nftAuction.getAuctionDetail(0)
+      ).to.be.revertedWithCustomError(nftAuction, "AuctionNotExist");
+    });
+
+    it("getAuctionsDetail 应该在批量查询包含不存在的拍卖时回退", async function () {
+      const nftAuction = await deployProxy();
+      await expect(
+        nftAuction.getAuctionsDetail([0, 1, 2])
+      ).to.be.revertedWithCustomError(nftAuction, "AuctionNotExist");
+    });
+  });
 	describe("getRemainingTime 函数测试", function () {
     let nftAuction;
     let priceOracleReader;
@@ -439,6 +468,160 @@ describe("NFT 合约补充测试", function () {
 			expect(remainingTime).to.equal(0);
 		});
 	});
+  describe("手续费策略与提现", function () {
+    let nftAuction;
+    let priceOracleReader;
+    let mockNFT;
+
+    beforeEach(async function () {
+      nftAuction = await deployProxy();
+      priceOracleReader = await deployPriceOracleReader();
+      mockNFT = await deployMockNFT();
+      await mockNFT.mint(owner.address);
+      await mockNFT.approve(await nftAuction.getAddress(), 0);
+      const ethFeed = await deployPriceFeed(200000000000n); // $2000
+      await priceOracleReader.setEthPriceFeed(await ethFeed.getAddress());
+    });
+
+    async function createAuctionAndBid(bidValue = ethers.parseEther("1")) {
+      await nftAuction.createAuction(
+        await priceOracleReader.getAddress(),
+        await mockNFT.getAddress(),
+        0,
+        START_PRICE_USD,
+        SHORT_DURATION
+      );
+
+      await nftAuction.connect(bidder1).placeBidETH(0, { value: bidValue });
+      await time.increase(SHORT_DURATION + 1);
+    }
+
+    it("管理员可以设置手续费策略，非管理员会被拒绝", async function () {
+      const policy = await deployMockFeePolicy(0, ethers.ZeroAddress);
+
+      await expect(
+        nftAuction.setFeePolicy(await policy.getAddress())
+      ).to.emit(nftAuction, "FeePolicyUpdated").withArgs(await policy.getAddress());
+
+      await expect(
+        nftAuction.connect(bidder1).setFeePolicy(await policy.getAddress())
+      ).to.be.revertedWithCustomError(nftAuction, "OnlyAdminCanUpgrade");
+    });
+
+    it("结束拍卖时应该使用手续费策略并累计手续费", async function () {
+      const policy = await deployMockFeePolicy(ethers.parseEther("0.2"), ethers.ZeroAddress);
+      await nftAuction.setFeePolicy(await policy.getAddress());
+
+      await createAuctionAndBid(ethers.parseEther("1"));
+
+      const tx = await nftAuction.endAuction(0);
+      await expect(tx).to.emit(nftAuction, "FeeAccrued").withArgs(
+        0,
+        ethers.ZeroAddress,
+        owner.address,
+        ethers.parseEther("0.2")
+      );
+
+      expect(await nftAuction.accruedFees(ethers.ZeroAddress)).to.equal(ethers.parseEther("0.2"));
+      expect(await ethers.provider.getBalance(await nftAuction.getAddress())).to.equal(ethers.parseEther("0.2"));
+    });
+
+    it("手续费大于成交额时应该回退", async function () {
+      const policy = await deployMockFeePolicy(ethers.parseEther("2"), owner.address);
+      await nftAuction.setFeePolicy(await policy.getAddress());
+
+      await createAuctionAndBid(ethers.parseEther("1"));
+
+      await expect(
+        nftAuction.endAuction(0)
+      ).to.be.revertedWithCustomError(nftAuction, "FeeExceedsProceeds");
+    });
+
+    it("手续费等于成交额时应该让卖家分成为 0 仍能结束拍卖", async function () {
+      const policy = await deployMockFeePolicy(ethers.parseEther("1"), bidder2.address);
+      await nftAuction.setFeePolicy(await policy.getAddress());
+
+      await createAuctionAndBid(ethers.parseEther("1"));
+
+      const tx = await nftAuction.endAuction(0);
+      await expect(tx).to.emit(nftAuction, "FeeAccrued").withArgs(
+        0,
+        ethers.ZeroAddress,
+        bidder2.address,
+        ethers.parseEther("1")
+      );
+
+      expect(await nftAuction.accruedFees(ethers.ZeroAddress)).to.equal(ethers.parseEther("1"));
+      expect(await ethers.provider.getBalance(await nftAuction.getAddress())).to.equal(ethers.parseEther("1"));
+      expect(await mockNFT.ownerOf(0)).to.equal(bidder1.address);
+    });
+
+    describe("withdrawFees 行为", function () {
+      beforeEach(async function () {
+        const policy = await deployMockFeePolicy(ethers.parseEther("0.5"), ethers.ZeroAddress);
+        await nftAuction.setFeePolicy(await policy.getAddress());
+
+        await createAuctionAndBid(ethers.parseEther("1"));
+        await nftAuction.endAuction(0);
+      });
+
+      it("非管理员不能提取手续费", async function () {
+        await expect(
+          nftAuction.connect(bidder1).withdrawFees(
+            ethers.ZeroAddress,
+            bidder1.address,
+            ethers.parseEther("0.1")
+          )
+        ).to.be.revertedWithCustomError(nftAuction, "OnlyAdminCanUpgrade");
+      });
+
+      it("拒绝 0 地址接收人", async function () {
+        await expect(
+          nftAuction.withdrawFees(ethers.ZeroAddress, ethers.ZeroAddress, ethers.parseEther("0.1"))
+        ).to.be.revertedWithCustomError(nftAuction, "InvalidNFTContractAddress");
+      });
+
+      it("拒绝金额为 0 或大于余额的提现", async function () {
+        await expect(
+          nftAuction.withdrawFees(ethers.ZeroAddress, bidder1.address, 0)
+        ).to.be.revertedWithCustomError(nftAuction, "AmountMustBeGreaterThanZero");
+
+        const balance = await nftAuction.accruedFees(ethers.ZeroAddress);
+        await expect(
+          nftAuction.withdrawFees(ethers.ZeroAddress, bidder1.address, balance + 1n)
+        ).to.be.revertedWithCustomError(nftAuction, "FeeExceedsProceeds");
+      });
+
+      it("成功提现后应减少累计手续费", async function () {
+        const recipientBalanceBefore = await ethers.provider.getBalance(bidder2.address);
+        const amount = ethers.parseEther("0.5");
+
+        await expect(
+          nftAuction.withdrawFees(ethers.ZeroAddress, bidder2.address, amount)
+        ).to.emit(nftAuction, "FeeWithdrawn").withArgs(
+          ethers.ZeroAddress,
+          bidder2.address,
+          amount
+        );
+
+        const recipientBalanceAfter = await ethers.provider.getBalance(bidder2.address);
+        expect(recipientBalanceAfter - recipientBalanceBefore).to.equal(amount);
+        expect(await nftAuction.accruedFees(ethers.ZeroAddress)).to.equal(0n);
+      });
+
+      it("提现到拒绝 ETH 的合约应该回退", async function () {
+        const revertingReceiver = await deployRevertingReceiver();
+
+        await expect(
+          nftAuction.withdrawFees(
+            ethers.ZeroAddress,
+            await revertingReceiver.getAddress(),
+            ethers.parseEther("0.5")
+          )
+        ).to.be.revertedWithCustomError(nftAuction, "ETHTransferFailed");
+      });
+    });
+  });
   describe("NFTAuction - 重入攻击防护测试", function () {
     let nftAuction;
     let priceOracleReader;

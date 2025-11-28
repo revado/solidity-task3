@@ -21,7 +21,7 @@ contract NFTAuction is Initializable, ERC721HolderUpgradeable, UUPSUpgradeable, 
 	error OnlyNFTOwnerCanCreateAuction();
 	error DurationTooShort();
 	error StartPriceMustBeGreaterThanZero();
-	error AuctionDoesNotExist();
+	error AuctionNotExist();
 	error AuctionAlreadyEnded();
 	error AuctionExpired();
 	error SellerCannotBidOnOwnAuction();
@@ -161,7 +161,7 @@ contract NFTAuction is Initializable, ERC721HolderUpgradeable, UUPSUpgradeable, 
 	 */
 	function _validateBidConditions(Auction storage auction, address seller) private view {
 		if (seller == address(0)) {
-			revert AuctionDoesNotExist();
+			revert AuctionNotExist();
 		}
 		// 卖家不能竞拍自己的拍卖
 		if (msg.sender == seller) {
@@ -502,7 +502,7 @@ contract NFTAuction is Initializable, ERC721HolderUpgradeable, UUPSUpgradeable, 
 	function getAuctionDetail(uint256 _auctionId) external view returns (Auction memory auction, uint256 remainingTime) {
 		auction = auctions[_auctionId];
 		if (auction.seller == address(0)) {
-			revert AuctionDoesNotExist();
+			revert AuctionNotExist();
 		}
 		remainingTime = getRemainingTime(_auctionId);
 	}
@@ -518,7 +518,7 @@ contract NFTAuction is Initializable, ERC721HolderUpgradeable, UUPSUpgradeable, 
 			uint256 id = auctionIds[i];
 			Auction memory auction = auctions[id];
 			if (auction.seller == address(0)) {
-				revert AuctionDoesNotExist();
+				revert AuctionNotExist();
 			}
 			auctionList[i] = auction;
 			remainingTimes[i] = getRemainingTime(id);
