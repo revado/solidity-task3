@@ -24,18 +24,6 @@ npx hardhat run scripts/deploy-local.js --network hardhat
 npx hardhat run scripts/deploy-sepolia.js --network sepolia
 ```
 
-### 部署方式对比
-
-| 特性 | 本地部署 | Sepolia 部署 |
-|------|---------|-------------|
-| **速度** | ⚡ 快（秒级） | 🐌 慢（需链上确认） |
-| **费用** | 💰 免费 | 💰 需要测试 ETH |
-| **持久性** | ❌ 临时 | ✅ 永久保存 |
-| **验证** | ❌ 不需要 | ✅ 可在 Etherscan 验证 |
-| **分享** | ❌ 仅本地 | ✅ 公开可访问 |
-| **价格源** | Mock Aggregator | Chainlink 官方预言机 |
-| **适用场景** | 开发测试 | 演示和集成测试 |
-
 ---
 
 ## 本地部署
@@ -109,8 +97,14 @@ npx hardhat console --network localhost
 ```
 
 ```javascript
-// 获取合约实例
-const nftAuction = await ethers.getContractAt("NFTAuction", "0xYourProxyAddress");
+// 获取合约实例（使用实际的合约地址替换）
+// 方法 1: 直接使用地址字符串（需要先规范化地址）
+const proxyAddress = "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707"; // 替换为实际地址
+const nftAuction = await ethers.getContractAt("NFTAuction", ethers.getAddress(proxyAddress));
+
+// 方法 2: 使用 hre.ethers（推荐）
+const { ethers } = require("hardhat");
+const nftAuction = await ethers.getContractAt("NFTAuction", proxyAddress);
 
 // 查看拍卖信息
 const auction = await nftAuction.auctions(0);

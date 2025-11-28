@@ -24,6 +24,17 @@ const CHAINLINK_FEEDS = {
 async function main() {
   console.log("🚀 开始部署 NFT 拍卖系统到 Sepolia 测试网...\n");
 
+  // 检查环境变量
+  if (!process.env.SEPOLIA_RPC_URL || process.env.SEPOLIA_RPC_URL === "") {
+    console.error("❌ 错误: 未配置 SEPOLIA_RPC_URL 环境变量");
+    process.exit(1);
+  }
+
+  if (!process.env.PRIVATE_KEY || process.env.PRIVATE_KEY === "") {
+    console.error("❌ 错误: 未配置 PRIVATE_KEY 环境变量");
+    process.exit(1);
+  }
+
   // 获取部署账户
   const [deployer] = await ethers.getSigners();
   console.log("部署账户:", deployer.address);

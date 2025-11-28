@@ -1,0 +1,29 @@
+{
+  "network": "sepolia",
+  "timestamp": "2025-11-28T09:50:50.074Z",
+  "deployer": "0x6bF4F004e553303BF9231f59BE3DdD38286108d6",
+  "contracts": {
+    "priceOracleReader": "0x8217561133526D16c78121B3931175EeBefb6932",
+    "nftAuctionImpl": "0x181a2B84b944Fb8051b6a997d4fFa36dfB8Cb1C1",
+    "nftAuctionProxy": "0x68E3EC2d9EE9670F2dC501bF456703cDb743C295",
+    "mockNFT": "0x32e83972C007eb44C12630DE4dF37AEEd0EFd4E8",
+    "mockUSDC": "0x2dc0068cbC67EfbE7be32840979E405b5a09d04a",
+    "mockFeePolicy": "0x8f7d40480F8BE7906fc28443Fa35082C9f44c55a"
+  },
+  "feePolicy": {
+    "address": "0x8f7d40480F8BE7906fc28443Fa35082C9f44c55a",
+    "defaultFeeAmount": "25000000000000000",
+    "feeRecipient": "0x6bF4F004e553303BF9231f59BE3DdD38286108d6"
+  },
+  "chainlink": {
+    "ETH_USD": "0x694AA1769357215DE4FAC081bf1f309aDC325306",
+    "USDC_USD": "0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E",
+    "USDT_USD": "0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E"
+  },
+  "etherscan": {
+    "priceOracleReader": "https://sepolia.etherscan.io/address/0x8217561133526D16c78121B3931175EeBefb6932",
+    "nftAuction": "https://sepolia.etherscan.io/address/0x68E3EC2d9EE9670F2dC501bF456703cDb743C295",
+    "mockNFT": "https://sepolia.etherscan.io/address/0x32e83972C007eb44C12630DE4dF37AEEd0EFd4E8",
+    "mockFeePolicy": "https://sepolia.etherscan.io/address/0x8f7d40480F8BE7906fc28443Fa35082C9f44c55a"
+  }
+}
