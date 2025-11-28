@@ -405,4 +405,34 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 		}
 		return endTime - block.timestamp;
 	}
+
+	/**
+	 * @notice 获取单个拍卖详情及剩余时间
+	 */
+	function getAuctionDetail(uint256 _auctionId) external view returns (Auction memory auction, uint256 remainingTime) {
+		auction = auctions[_auctionId];
+		if (auction.seller == address(0)) {
+			revert AuctionDoesNotExist();
+		}
+		remainingTime = getRemainingTime(_auctionId);
+	}
+
+	/**
+	 * @notice 批量获取拍卖详情及剩余时间
+	 */
+	function getAuctionsDetail(uint256[] calldata auctionIds) external view returns (Auction[] memory auctionList, uint256[] memory remainingTimes) {
+		uint256 len = auctionIds.length;
+		auctionList = new Auction[](len);
+		remainingTimes = new uint256[](len);
+		for (uint256 i = 0; i < len; ) {
+			uint256 id = auctionIds[i];
+			Auction memory auction = auctions[id];
+			if (auction.seller == address(0)) {
+				revert AuctionDoesNotExist();
+			}
+			auctionList[i] = auction;
+			remainingTimes[i] = getRemainingTime(id);
+			unchecked { ++i; }
+		}
+	}
 }
