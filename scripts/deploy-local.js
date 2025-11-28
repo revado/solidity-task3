@@ -168,7 +168,7 @@ async function main() {
   console.log("   卖家:", auction.seller);
   console.log("   最高出价者:", auction.highestBidder);
   console.log("   最高出价:", ethers.formatEther(auction.highestBid), "ETH");
-  console.log("   出价币种:", auction.tokenAddress === ethers.ZeroAddress ? "ETH" : "ERC20");
+  console.log("   出价币种:", auction.token === ethers.ZeroAddress ? "ETH" : "ERC20");
   console.log("   拍卖结束:", auction.ended ? "是" : "否");
 
   const remainingTime = await nftAuction.getRemainingTime(0);

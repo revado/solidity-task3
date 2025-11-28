@@ -235,7 +235,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
 
       const auction = await nftAuction.auctions(0);
       expect(auction.highestBidder).to.equal(bidder2.address);
-      expect(auction.tokenAddress).to.equal(await mockWBTC.getAddress());
+      expect(auction.token).to.equal(await mockWBTC.getAddress());
     });
 
     it("WBTC (8位) → DAI (18位) → ETH (18位) 多次切换", async function () {
@@ -274,7 +274,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
 
       const auction = await nftAuction.auctions(0);
       expect(auction.highestBidder).to.equal(bidder1.address);
-      expect(auction.tokenAddress).to.equal(ethers.ZeroAddress);
+      expect(auction.token).to.equal(ethers.ZeroAddress);
       expect(auction.highestBid).to.equal(ethers.parseEther("0.6"));
     });
   });

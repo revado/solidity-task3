@@ -27,7 +27,7 @@ contract PriceOracleReader is IPriceOracleReader, Ownable {
 
 	// ============================== 事件 ==============================
 	// 代币价格 Feed 更新事件
-	event PriceFeedUpdated(address indexed tokenAddress, address indexed feed);
+	event PriceFeedUpdated(address indexed token, address indexed feed);
 
 	// ============================== 函数 ==============================
 	constructor() Ownable(msg.sender) {}
@@ -47,11 +47,11 @@ contract PriceOracleReader is IPriceOracleReader, Ownable {
 
 	/**
 	 * @notice 设置 ERC-20 代币价格 Feed
-	 * @param tokenAddress 代币地址
+	 * @param token 代币地址
 	 * @param priceFeed 价格 Feed 地址
 	 */
-	function setTokenPriceFeed(address tokenAddress, address priceFeed) external onlyOwner {
-		if (tokenAddress == address(0)) {
+	function setTokenPriceFeed(address token, address priceFeed) external onlyOwner {
+		if (token == address(0)) {
 			revert InvalidTokenAddress();
 		}
 
@@ -59,7 +59,7 @@ contract PriceOracleReader is IPriceOracleReader, Ownable {
 			revert InvalidTokenPriceFeed();
 		}
 
-		priceFeeds[tokenAddress] = priceFeed;
+		priceFeeds[token] = priceFeed;
 
 		emit PriceFeedUpdated(address(0), priceFeed);
 	}
@@ -74,11 +74,11 @@ contract PriceOracleReader is IPriceOracleReader, Ownable {
 
 	/**
 	 * @notice 获取 ERC-20 代币当前价格
-	 * @param tokenAddress 代币合约地址
+	 * @param token 代币地址
 	 * @return USD 价格（8 位小数）
 	 */
-	function getTokenPrice(address tokenAddress) public view returns (uint256) {
-		address priceFeed = priceFeeds[tokenAddress];
+	function getTokenPrice(address token) public view returns (uint256) {
+		address priceFeed = priceFeeds[token];
 		return _getPrice(priceFeed);
 	}
 
@@ -127,28 +127,29 @@ contract PriceOracleReader is IPriceOracleReader, Ownable {
 
 	/**
 	 * @notice 获取 ERC-20 代币的 USD 价值
+	 * @param token 代币地址
 	 * @param amount 代币数量（最小单位）
 	 * @return USD 价格（8 位小数）
 	 */
-	function getTokenValueInUSD(address tokenAddress, uint256 amount) external view override returns (uint256) {
+	function getTokenValueInUSD(address token, uint256 amount) external view override returns (uint256) {
 		// 动态获取代币精度
-		uint8 decimals = IERC20Metadata(tokenAddress).decimals();
+		uint8 decimals = IERC20Metadata(token).decimals();
 
 		// ERC-20 代币价格是 8 位小数
 		// (代币数量 * 代币价格) / 10^decimals，结果是 8 位小数的美元
-		uint256 tokenPrice = getTokenPrice(tokenAddress);
+		uint256 tokenPrice = getTokenPrice(token);
 		return (amount * tokenPrice) / (10 ** decimals);
 	}
 
 	/**
 	 * @notice 检查价格 Feed 是否设置
-	 * @param tokenAddress 代币合约地址
+	 * @param token 代币地址
 	 * @return 是否设置
 	 */
-	function isPriceFeedSet(address tokenAddress) public view returns (bool) {
-		if (tokenAddress == address(0)) {
+	function isPriceFeedSet(address token) public view returns (bool) {
+		if (token == address(0)) {
 			return ethPriceFeed != address(0);
 		}
-		return priceFeeds[tokenAddress] != address(0);
+		return priceFeeds[token] != address(0);
 	}
 }

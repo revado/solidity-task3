@@ -85,14 +85,14 @@ describe("PriceOracleReader 合约测试", function () {
 
 	describe("setTokenPriceFeed - 设置代币价格 Feed", function () {
 		it("owner 应该能够设置代币价格 Feed", async function () {
-			const tokenAddress = await mockERC20.getAddress();
+			const token = await mockERC20.getAddress();
 			const feedAddress = await mockUSDCUSD.getAddress();
 
-			await expect(priceOracleReader.setTokenPriceFeed(tokenAddress, feedAddress))
+			await expect(priceOracleReader.setTokenPriceFeed(token, feedAddress))
 				.to.emit(priceOracleReader, "PriceFeedUpdated")
 				.withArgs(ethers.ZeroAddress, feedAddress);
 
-			expect(await priceOracleReader.priceFeeds(tokenAddress)).to.equal(feedAddress);
+			expect(await priceOracleReader.priceFeeds(token)).to.equal(feedAddress);
 		});
 
 		it("非 owner 不能设置代币价格 Feed", async function () {

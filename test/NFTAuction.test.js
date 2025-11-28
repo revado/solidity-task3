@@ -267,7 +267,7 @@ describe("NFT 拍卖测试", function () {
 
       const auction = await nftAuction.auctions(0);
       expect(auction.highestBidder).to.equal(bidder1.address);
-      expect(auction.tokenAddress).to.equal(await mockUSDC.getAddress());
+      expect(auction.token).to.equal(await mockUSDC.getAddress());
     });
 
     it("USDC 竞价需要先授权", async function () {
@@ -322,7 +322,7 @@ describe("NFT 拍卖测试", function () {
       // 验证新的最高出价
       const auction = await nftAuction.auctions(0);
       expect(auction.highestBidder).to.equal(bidder2.address);
-      expect(auction.tokenAddress).to.equal(await mockUSDC.getAddress());
+      expect(auction.token).to.equal(await mockUSDC.getAddress());
     });
 
     it("USDC 出价后可以用 ETH 覆盖", async function () {
@@ -351,7 +351,7 @@ describe("NFT 拍卖测试", function () {
       // 验证新的最高出价
       const auction = await nftAuction.auctions(0);
       expect(auction.highestBidder).to.equal(bidder2.address);
-      expect(auction.tokenAddress).to.equal(ethers.ZeroAddress);
+      expect(auction.token).to.equal(ethers.ZeroAddress);
     });
   });
 
