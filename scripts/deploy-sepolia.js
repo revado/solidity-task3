@@ -106,7 +106,26 @@ async function main() {
   console.log("   ✅ USDC/USD 价格源已设置:", CHAINLINK_FEEDS.USDC_USD, "\n");
 
   // ========================================
-  // 5. Mint 测试 NFT（可选）
+  // 5. 部署 MockFeePolicy（可选：用于测试手续费功能）
+  // ========================================
+  console.log("💰 部署 MockFeePolicy（测试手续费策略）...");
+  const MockFeePolicy = await ethers.getContractFactory("MockFeePolicy");
+  // 默认手续费：2.5% (0.025 ETH 对于 1 ETH 的成交额)
+  const defaultFeeAmount = ethers.parseEther("0.025");
+  const mockFeePolicy = await MockFeePolicy.deploy(defaultFeeAmount, deployer.address);
+  await mockFeePolicy.waitForDeployment();
+  const mockFeePolicyAddress = await mockFeePolicy.getAddress();
+  console.log("   ✅ MockFeePolicy:", mockFeePolicyAddress);
+  console.log("   💵 默认手续费: 2.5% (0.025 ETH per 1 ETH)");
+  console.log("   👤 手续费归集地址:", deployer.address);
+
+  // 设置手续费策略到 NFTAuction
+  console.log("   📝 设置手续费策略到 NFTAuction...");
+  await nftAuction.setFeePolicy(mockFeePolicyAddress);
+  console.log("   ✅ 手续费策略已设置\n");
+
+  // ========================================
+  // 6. Mint 测试 NFT（可选）
   // ========================================
   console.log("🎁 Mint 测试 NFT...");
   await mockNFT.mint(deployer.address);
@@ -114,7 +133,7 @@ async function main() {
   console.log("   💡 你现在可以用这个 NFT 创建拍卖\n");
 
   // ========================================
-  // 6. 验证合约（可选）
+  // 7. 验证合约（可选）
   // ========================================
   console.log("📋 合约验证命令:");
   console.log("   # PriceOracleReader");
@@ -126,10 +145,12 @@ async function main() {
   console.log("\n   # MockNFT");
   console.log(`   npx hardhat verify --network sepolia ${mockNFTAddress}`);
   console.log("\n   # MockUSDC");
-  console.log(`   npx hardhat verify --network sepolia ${mockUSDCAddress} "Test USDC" "USDC" 6\n`);
+  console.log(`   npx hardhat verify --network sepolia ${mockUSDCAddress} "Test USDC" "USDC" 6`);
+  console.log("\n   # MockFeePolicy");
+  console.log(`   npx hardhat verify --network sepolia ${mockFeePolicyAddress} ${defaultFeeAmount} ${deployer.address}\n`);
 
   // ========================================
-  // 7. 打印部署摘要
+  // 8. 打印部署摘要
   // ========================================
   console.log("=".repeat(80));
   console.log("✨ 部署完成！\n");
@@ -140,11 +161,13 @@ async function main() {
   console.log("   NFTAuction 代理:       ", nftAuctionAddress);
   console.log("   MockNFT (测试):        ", mockNFTAddress);
   console.log("   MockUSDC (测试):       ", mockUSDCAddress);
+  console.log("   MockFeePolicy (测试):  ", mockFeePolicyAddress);
 
   console.log("\n🔗 Etherscan 链接:");
   console.log("   PriceOracleReader:     ", `https://sepolia.etherscan.io/address/${priceOracleReaderAddress}`);
   console.log("   NFTAuction 代理:       ", `https://sepolia.etherscan.io/address/${nftAuctionAddress}`);
   console.log("   MockNFT:               ", `https://sepolia.etherscan.io/address/${mockNFTAddress}`);
+  console.log("   MockFeePolicy:         ", `https://sepolia.etherscan.io/address/${mockFeePolicyAddress}`);
 
   console.log("\n📊 Chainlink 价格源:");
   console.log("   ETH/USD:               ", `https://sepolia.etherscan.io/address/${CHAINLINK_FEEDS.ETH_USD}`);
@@ -166,11 +189,13 @@ async function main() {
   console.log("\n💡 提示:");
   console.log("   - 保存好所有合约地址");
   console.log("   - 验证合约后可以在 Etherscan 上直接交互");
-  console.log("   - MockNFT 和 MockUSDC 仅用于测试，生产环境请使用真实合约");
+  console.log("   - MockNFT、MockUSDC 和 MockFeePolicy 仅用于测试，生产环境请使用真实合约");
+  console.log("   - 手续费策略已自动设置到 NFTAuction，默认手续费为 2.5%");
+  console.log("   - 可以通过 setFeePolicy(address(0)) 禁用手续费");
   console.log("=".repeat(80));
 
   // ========================================
-  // 8. 保存部署信息到文件
+  // 9. 保存部署信息到文件
   // ========================================
   const deploymentInfo = {
     network: "sepolia",
@@ -182,12 +207,19 @@ async function main() {
       nftAuctionProxy: nftAuctionAddress,
       mockNFT: mockNFTAddress,
       mockUSDC: mockUSDCAddress,
+      mockFeePolicy: mockFeePolicyAddress,
+    },
+    feePolicy: {
+      address: mockFeePolicyAddress,
+      defaultFeeAmount: defaultFeeAmount.toString(),
+      feeRecipient: deployer.address,
     },
     chainlink: CHAINLINK_FEEDS,
     etherscan: {
       priceOracleReader: `https://sepolia.etherscan.io/address/${priceOracleReaderAddress}`,
       nftAuction: `https://sepolia.etherscan.io/address/${nftAuctionAddress}`,
       mockNFT: `https://sepolia.etherscan.io/address/${mockNFTAddress}`,
+      mockFeePolicy: `https://sepolia.etherscan.io/address/${mockFeePolicyAddress}`,
     }
   };
 

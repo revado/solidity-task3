@@ -92,7 +92,25 @@ async function main() {
   console.log("   ✅ USDC 价格源已设置\n");
 
   // ========================================
-  // 6. Mint 测试资产
+  // 6. 部署 MockFeePolicy（可选：用于测试手续费功能）
+  // ========================================
+  console.log("💰 部署 MockFeePolicy（测试手续费策略）...");
+  const MockFeePolicy = await ethers.getContractFactory("MockFeePolicy");
+  // 默认手续费：2.5% (0.025 ETH 对于 1 ETH 的成交额)
+  const defaultFeeAmount = ethers.parseEther("0.025");
+  const mockFeePolicy = await MockFeePolicy.deploy(defaultFeeAmount, deployer.address);
+  await mockFeePolicy.waitForDeployment();
+  console.log("   ✅ MockFeePolicy:", await mockFeePolicy.getAddress());
+  console.log("   💵 默认手续费: 2.5% (0.025 ETH per 1 ETH)");
+  console.log("   👤 手续费归集地址:", deployer.address);
+
+  // 设置手续费策略到 NFTAuction
+  console.log("   📝 设置手续费策略到 NFTAuction...");
+  await nftAuction.setFeePolicy(await mockFeePolicy.getAddress());
+  console.log("   ✅ 手续费策略已设置\n");
+
+  // ========================================
+  // 7. Mint 测试资产
   // ========================================
   console.log("🎁 Mint 测试资产...");
 
@@ -110,7 +128,7 @@ async function main() {
   console.log("   ✅ Minted 10,000 USDC to:", bidder2.address, "\n");
 
   // ========================================
-  // 7. 创建示例拍卖
+  // 8. 创建示例拍卖
   // ========================================
   console.log("⚡ 创建示例 ETH 拍卖...");
 
@@ -136,7 +154,7 @@ async function main() {
   console.log("   ⏰ 持续时间: 1 hour\n");
 
   // ========================================
-  // 8. 模拟出价
+  // 9. 模拟出价
   // ========================================
   console.log("🎯 模拟出价...");
 
@@ -161,7 +179,7 @@ async function main() {
   console.log("   ✅ Bidder1 再次出价: 0.6 ETH (~$1680)\n");
 
   // ========================================
-  // 9. 查询拍卖状态
+  // 10. 查询拍卖状态
   // ========================================
   console.log("📊 当前拍卖状态:");
   const auction = await nftAuction.auctions(0);
@@ -175,7 +193,7 @@ async function main() {
   console.log("   剩余时间:", remainingTime.toString(), "秒\n");
 
   // ========================================
-  // 10. 打印部署摘要
+  // 11. 打印部署摘要
   // ========================================
   console.log("=".repeat(70));
   console.log("✨ 部署完成！\n");
@@ -188,6 +206,7 @@ async function main() {
   console.log("   NFTAuction 代理:       ", await nftAuction.getAddress());
   console.log("   MockNFT:               ", await mockNFT.getAddress());
   console.log("   MockUSDC:              ", await mockUSDC.getAddress());
+  console.log("   MockFeePolicy:         ", await mockFeePolicy.getAddress());
 
   console.log("\n🎮 测试账户:");
   console.log("   Deployer:              ", deployer.address);
@@ -205,6 +224,8 @@ async function main() {
   console.log("   - 拍卖 #0 已创建，可以继续测试出价");
   console.log("   - NFT Token #1 仍然属于卖家，可创建第二个拍卖");
   console.log("   - 使用 getRemainingTime(0) 查看剩余时间");
+  console.log("   - 手续费策略已自动设置，默认手续费为 2.5%");
+  console.log("   - 可以通过 setFeePolicy(address(0)) 禁用手续费");
   console.log("=".repeat(70));
 }
 
