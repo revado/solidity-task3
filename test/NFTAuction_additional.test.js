@@ -317,11 +317,93 @@ describe("NFT 合约补充测试", function () {
       ).to.be.revertedWithCustomError(nftAuction, "AuctionNotExist");
     });
 
+    it("getAuctionDetail 应该成功返回存在的拍卖详情", async function () {
+      const nftAuction = await deployProxy();
+      const priceOracleReader = await deployPriceOracleReader();
+      const mockNFT = await deployMockNFT();
+      const ethFeed = await deployPriceFeed(200000000000n); // $2000
+      await priceOracleReader.setEthPriceFeed(await ethFeed.getAddress());
+
+      // 创建拍卖
+      await mockNFT.mint(owner.address);
+      await mockNFT.approve(await nftAuction.getAddress(), 0);
+      await nftAuction.createAuction(
+        await priceOracleReader.getAddress(),
+        await mockNFT.getAddress(),
+        0,
+        START_PRICE_USD,
+        DURATION
+      );
+
+      // 查询拍卖详情
+      const [auction, remainingTime] = await nftAuction.getAuctionDetail(0);
+
+      expect(auction.seller).to.equal(owner.address);
+      expect(auction.tokenId).to.equal(0);
+      expect(auction.startPrice).to.equal(START_PRICE_USD);
+      expect(auction.ended).to.be.false;
+      expect(remainingTime).to.be.gt(0);
+      expect(remainingTime).to.be.lte(DURATION);
+    });
+
     it("getAuctionsDetail 应该在批量查询包含不存在的拍卖时回退", async function () {
       const nftAuction = await deployProxy();
       await expect(
         nftAuction.getAuctionsDetail([0, 1, 2])
       ).to.be.revertedWithCustomError(nftAuction, "AuctionNotExist");
+    });
+
+    it("getAuctionsDetail 应该成功批量查询存在的拍卖", async function () {
+      const nftAuction = await deployProxy();
+      const priceOracleReader = await deployPriceOracleReader();
+      const mockNFT = await deployMockNFT();
+      const ethFeed = await deployPriceFeed(200000000000n); // $2000
+      await priceOracleReader.setEthPriceFeed(await ethFeed.getAddress());
+
+      // 创建多个拍卖
+      await mockNFT.mint(owner.address);
+      await mockNFT.mint(owner.address);
+      await mockNFT.mint(owner.address);
+      await mockNFT.approve(await nftAuction.getAddress(), 0);
+      await mockNFT.approve(await nftAuction.getAddress(), 1);
+      await mockNFT.approve(await nftAuction.getAddress(), 2);
+
+      await nftAuction.createAuction(
+        await priceOracleReader.getAddress(),
+        await mockNFT.getAddress(),
+        0,
+        START_PRICE_USD,
+        DURATION
+      );
+      await nftAuction.createAuction(
+        await priceOracleReader.getAddress(),
+        await mockNFT.getAddress(),
+        1,
+        START_PRICE_USD,
+        DURATION
+      );
+      await nftAuction.createAuction(
+        await priceOracleReader.getAddress(),
+        await mockNFT.getAddress(),
+        2,
+        START_PRICE_USD,
+        DURATION
+      );
+
+      // 批量查询
+      const [auctions, remainingTimes] = await nftAuction.getAuctionsDetail([0, 1, 2]);
+
+      expect(auctions.length).to.equal(3);
+      expect(remainingTimes.length).to.equal(3);
+      expect(auctions[0].seller).to.equal(owner.address);
+      expect(auctions[1].seller).to.equal(owner.address);
+      expect(auctions[2].seller).to.equal(owner.address);
+      expect(auctions[0].tokenId).to.equal(0);
+      expect(auctions[1].tokenId).to.equal(1);
+      expect(auctions[2].tokenId).to.equal(2);
+      expect(remainingTimes[0]).to.be.gt(0);
+      expect(remainingTimes[1]).to.be.gt(0);
+      expect(remainingTimes[2]).to.be.gt(0);
     });
   });
 	describe("getRemainingTime 函数测试", function () {
@@ -524,6 +606,71 @@ describe("NFT 合约补充测试", function () {
 
       expect(await nftAuction.accruedFees(ethers.ZeroAddress)).to.equal(ethers.parseEther("0.2"));
       expect(await ethers.provider.getBalance(await nftAuction.getAddress())).to.equal(ethers.parseEther("0.2"));
+    });
+
+    it("当手续费策略返回 recipient 为 0 地址时，应该使用 admin 作为归集地址", async function () {
+      // 这个测试明确验证 _computeFee 中 recipient == address(0) 时设置为 admin 的分支
+      const policy = await deployMockFeePolicy(ethers.parseEther("0.3"), ethers.ZeroAddress);
+      await nftAuction.setFeePolicy(await policy.getAddress());
+
+      await createAuctionAndBid(ethers.parseEther("1"));
+
+      const tx = await nftAuction.endAuction(0);
+      // 验证手续费归集地址是 admin（因为策略返回的 recipient 是 0 地址）
+      await expect(tx).to.emit(nftAuction, "FeeAccrued").withArgs(
+        0,
+        ethers.ZeroAddress,
+        owner.address, // admin
+        ethers.parseEther("0.3")
+      );
+    });
+
+    it("没有手续费策略时结束拍卖应该不收取手续费", async function () {
+      // 验证 feePolicy == address(0) 时，手续费为 0
+      await createAuctionAndBid(ethers.parseEther("1"));
+
+      const sellerBalanceBefore = await ethers.provider.getBalance(owner.address);
+      const tx = await nftAuction.endAuction(0);
+      const receipt = await tx.wait();
+      const gasUsed = receipt.gasUsed * receipt.gasPrice;
+      const sellerBalanceAfter = await ethers.provider.getBalance(owner.address);
+
+      // 卖家应该收到全部成交额（扣除 gas 费用）
+      const expectedSellerAmount = ethers.parseEther("1");
+      expect(sellerBalanceAfter + gasUsed - sellerBalanceBefore).to.equal(expectedSellerAmount);
+
+      // 手续费应该为 0
+      expect(await nftAuction.accruedFees(ethers.ZeroAddress)).to.equal(0);
+
+      // 合约余额应该为 0（所有资金都给了卖家）
+      expect(await ethers.provider.getBalance(await nftAuction.getAddress())).to.equal(0);
+    });
+
+    it("手续费策略返回手续费为 0 时，不应该累计手续费", async function () {
+      // 测试 feeAmount > 0 的 false 分支
+      const policy = await deployMockFeePolicy(0, owner.address);
+      await nftAuction.setFeePolicy(await policy.getAddress());
+
+      await createAuctionAndBid(ethers.parseEther("1"));
+
+      const sellerBalanceBefore = await ethers.provider.getBalance(owner.address);
+      const tx = await nftAuction.endAuction(0);
+      const receipt = await tx.wait();
+      const gasUsed = receipt.gasUsed * receipt.gasPrice;
+      const sellerBalanceAfter = await ethers.provider.getBalance(owner.address);
+
+      // 卖家应该收到全部成交额（扣除 gas 费用）
+      const expectedSellerAmount = ethers.parseEther("1");
+      expect(sellerBalanceAfter + gasUsed - sellerBalanceBefore).to.equal(expectedSellerAmount);
+
+      // 手续费应该为 0（不应该累计）
+      expect(await nftAuction.accruedFees(ethers.ZeroAddress)).to.equal(0);
+
+      // 合约余额应该为 0（所有资金都给了卖家）
+      expect(await ethers.provider.getBalance(await nftAuction.getAddress())).to.equal(0);
+
+      // 不应该触发 FeeAccrued 事件
+      await expect(tx).to.not.emit(nftAuction, "FeeAccrued");
     });
 
     it("手续费大于成交额时应该回退", async function () {

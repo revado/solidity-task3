@@ -15,6 +15,7 @@ import { IFeePolicy } from "./interfaces/IFeePolicy.sol";
 // NFT 拍卖合约
 contract NFTAuction is Initializable, ERC721HolderUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
 	using SafeERC20 for IERC20;
+
 	// ============================== 自定义错误 ==============================
 	error InvalidPriceOracleReaderAddress();
 	error InvalidNFTContractAddress();
@@ -224,9 +225,6 @@ contract NFTAuction is Initializable, ERC721HolderUpgradeable, UUPSUpgradeable, 
 	 */
 	function _getPriceOracleReader(Auction storage auction) private view returns (IPriceOracleReader) {
 		address oracle = auction.priceOracleReader;
-		if (oracle == address(0)) {
-			revert InvalidPriceOracleReaderAddress();
-		}
 		return IPriceOracleReader(oracle);
 	}
 
