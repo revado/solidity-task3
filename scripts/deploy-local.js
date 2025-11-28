@@ -142,7 +142,7 @@ async function main() {
 
   // Bidder1 用 ETH 出价
   const ethBid1 = ethers.parseEther("0.5"); // 0.5 ETH ≈ $1400
-  await nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+  await nftAuction.connect(bidder1).placeBidETH(0, {
     value: ethBid1
   });
   console.log("   ✅ Bidder1 出价: 0.5 ETH (~$1400)");
@@ -150,12 +150,12 @@ async function main() {
   // Bidder2 用 USDC 出价
   const usdcBid = ethers.parseUnits("1500", 6); // 1500 USDC
   await mockUSDC.connect(bidder2).approve(await nftAuction.getAddress(), usdcBid);
-  await nftAuction.connect(bidder2).placeBid(0, await mockUSDC.getAddress(), usdcBid);
+  await nftAuction.connect(bidder2).placeBidToken(0, await mockUSDC.getAddress(), usdcBid);
   console.log("   ✅ Bidder2 出价: 1500 USDC (~$1500)");
 
   // Bidder1 再次用 ETH 出价
   const ethBid2 = ethers.parseEther("0.6"); // 0.6 ETH ≈ $1680
-  await nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+  await nftAuction.connect(bidder1).placeBidETH(0, {
     value: ethBid2
   });
   console.log("   ✅ Bidder1 再次出价: 0.6 ETH (~$1680)\n");

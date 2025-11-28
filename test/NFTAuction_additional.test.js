@@ -131,7 +131,7 @@ describe("NFT 合约补充测试", function () {
 
     it("应该在拍卖不存在时回退", async function () {
       await expect(
-        nftAuction.placeBid(999, ethers.ZeroAddress, 0, { value: ethers.parseEther("1") })
+        nftAuction.placeBidETH(999, { value: ethers.parseEther("1") })
       ).to.be.revertedWithCustomError(nftAuction, "AuctionDoesNotExist");
     });
 
@@ -145,7 +145,7 @@ describe("NFT 合约补充测试", function () {
       );
 
       await expect(
-        nftAuction.placeBid(0, ethers.ZeroAddress, 0, { value: ethers.parseEther("1") })
+        nftAuction.placeBidETH(0, { value: ethers.parseEther("1") })
       ).to.be.revertedWithCustomError(nftAuction, "SellerCannotBidOnOwnAuction");
     });
 
@@ -159,7 +159,7 @@ describe("NFT 合约补充测试", function () {
       );
 
       await expect(
-        nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, { value: 0 })
+        nftAuction.connect(bidder1).placeBidETH(0, { value: 0 })
       ).to.be.revertedWithCustomError(nftAuction, "MustSendETH");
     });
 
@@ -180,7 +180,7 @@ describe("NFT 合约补充测试", function () {
       await token.connect(bidder1).approve(await nftAuction.getAddress(), ethers.MaxUint256);
 
       await expect(
-        nftAuction.connect(bidder1).placeBid(
+        nftAuction.connect(bidder1).placeBidToken(
           0,
           await token.getAddress(),
           0
@@ -202,7 +202,7 @@ describe("NFT 合约补充测试", function () {
       await token.connect(bidder1).approve(await nftAuction.getAddress(), ethers.MaxUint256);
 
       await expect(
-        nftAuction.connect(bidder1).placeBid(
+        nftAuction.connect(bidder1).placeBidToken(
           0,
           await token.getAddress(),
           ethers.parseUnits("100", 18)
@@ -221,7 +221,7 @@ describe("NFT 合约补充测试", function () {
       );
 
       await expect(
-        nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, { value: ethers.parseEther("1") })
+        nftAuction.connect(bidder1).placeBidETH(0, { value: ethers.parseEther("1") })
       ).to.be.reverted;
     });
 
@@ -238,7 +238,7 @@ describe("NFT 合约补充测试", function () {
       await nftAuction.endAuction(0);
 
       await expect(
-        nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, { value: ethers.parseEther("1") })
+        nftAuction.connect(bidder1).placeBidETH(0, { value: ethers.parseEther("1") })
       ).to.be.revertedWithCustomError(nftAuction, "AuctionAlreadyEnded");
     });
   });
@@ -365,7 +365,7 @@ describe("NFT 合约补充测试", function () {
 			);
 
 			// 有人出价
-			await nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+			await nftAuction.connect(bidder1).placeBidETH(0, {
 				value: ethers.parseEther("1")
 			});
 
@@ -496,14 +496,14 @@ describe("NFT 合约补充测试", function () {
     describe("重入攻击防护", function () {
       it("应该防止重入攻击 - transfer() 的 2300 gas 限制", async function () {
         // user1 先正常出价
-        await nftAuction.connect(user1).placeBid(0, ethers.ZeroAddress, 0, {
+        await nftAuction.connect(user1).placeBidETH(0, {
           value: ethers.parseEther("1")
         });
 
         // user2 出更高价，触发退款给 user1
         // 注意：退款使用 transfer() 只提供 2300 gas
         // 这确保了即使接收方尝试重入也会因 gas 不足而失败
-        await nftAuction.connect(user2).placeBid(0, ethers.ZeroAddress, 0, {
+        await nftAuction.connect(user2).placeBidETH(0, {
           value: ethers.parseEther("2")
         });
 
@@ -515,17 +515,17 @@ describe("NFT 合约补充测试", function () {
 
       it("正常的连续出价应该工作", async function () {
         // user1 出价
-        await nftAuction.connect(user1).placeBid(0, ethers.ZeroAddress, 0, {
+        await nftAuction.connect(user1).placeBidETH(0, {
           value: ethers.parseEther("1")
         });
 
         // user2 出更高价
-        await nftAuction.connect(user2).placeBid(0, ethers.ZeroAddress, 0, {
+        await nftAuction.connect(user2).placeBidETH(0, {
           value: ethers.parseEther("2")
         });
 
         // user1 再次出价
-        await nftAuction.connect(user1).placeBid(0, ethers.ZeroAddress, 0, {
+        await nftAuction.connect(user1).placeBidETH(0, {
           value: ethers.parseEther("3")
         });
 
@@ -543,7 +543,7 @@ describe("NFT 合约补充测试", function () {
 
         // 连续多次正常出价
         for (let i = 0; i < bidders.length; i++) {
-          await nftAuction.connect(bidders[i]).placeBid(0, ethers.ZeroAddress, 0, {
+          await nftAuction.connect(bidders[i]).placeBidETH(0, {
             value: values[i]
           });
         }

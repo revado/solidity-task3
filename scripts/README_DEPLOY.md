@@ -93,16 +93,16 @@ await nftAuction.connect(seller).createAuction(
 ### 8️⃣ **模拟出价**
 ```javascript
 // Bidder1: 0.5 ETH (~$1400)
-await nftAuction.connect(bidder1).placeBid(0, ZeroAddress, 0, {
+await nftAuction.connect(bidder1).placeBidETH(0, {
   value: parseEther("0.5")
 });
 
 // Bidder2: 1500 USDC (~$1500)
 await mockUSDC.connect(bidder2).approve(nftAuction, 1500 USDC);
-await nftAuction.connect(bidder2).placeBid(0, mockUSDC, 1500 USDC);
+await nftAuction.connect(bidder2).placeBidToken(0, mockUSDC, 1500 USDC);
 
 // Bidder1: 0.6 ETH (~$1680)
-await nftAuction.connect(bidder1).placeBid(0, ZeroAddress, 0, {
+await nftAuction.connect(bidder1).placeBidETH(0, {
   value: parseEther("0.6")
 });
 ```
@@ -178,7 +178,7 @@ console.log("剩余时间:", remaining.toString(), "秒");
 const [deployer, seller, bidder1, bidder2] = await ethers.getSigners();
 
 // 继续出价测试
-await nftAuction.connect(bidder2).placeBid(0, ethers.ZeroAddress, 0, {
+await nftAuction.connect(bidder2).placeBidETH(0, {
   value: ethers.parseEther("0.7")
 });
 ```
@@ -489,14 +489,14 @@ await nftAuction.createAuction(
 
 ```javascript
 // ETH 出价
-await nftAuction.placeBid(0, ethers.ZeroAddress, 0, {
+await nftAuction.placeBidETH(0, {
   value: ethers.parseEther("0.5")
 });
 
 // ERC20 出价
 const mockUSDC = await ethers.getContractAt("MockERC20", "0x...");
 await mockUSDC.approve(nftAuction.target, ethers.parseUnits("1500", 6));
-await nftAuction.placeBid(0, mockUSDC.target, ethers.parseUnits("1500", 6));
+await nftAuction.placeBidToken(0, mockUSDC.target, ethers.parseUnits("1500", 6));
 ```
 
 ## 📊 Chainlink 价格源

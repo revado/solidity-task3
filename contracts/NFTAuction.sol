@@ -24,7 +24,6 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	error SellerCannotBidOnOwnAuction();
 	error MustSendETH();
 	error AmountMustBeGreaterThanZero();
-	error ETHNotAcceptedForERC20Bids();
 	error BidMustBeAtLeastStartingPrice();
 	error BidMustBeHigherThanCurrentHighestBid();
 	error AuctionHasNotEndedYet();
@@ -178,17 +177,12 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	 * @param tokenAddress 代币地址
 	 * @param amount 代币数量
 	 * @return payValueInUSD 美元价值（8位小数）
- 	 * @return bidAmount 代币数量
 	 */
-	function _calculateERC20BidValue(IPriceOracleReader oracle, address tokenAddress, uint256 amount) private view returns (uint256 payValueInUSD, uint256 bidAmount) {
+	function _calculateERC20BidValue(IPriceOracleReader oracle, address tokenAddress, uint256 amount) private view returns (uint256 payValueInUSD) {
 		if (amount == 0) {
 			revert AmountMustBeGreaterThanZero();
 		}
-		if (msg.value != 0) {
-			revert ETHNotAcceptedForERC20Bids();
-		}
 
-		bidAmount = amount;
 		payValueInUSD = oracle.getTokenValueInUSD(tokenAddress, amount);
 	}
 
@@ -271,48 +265,65 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
 	}
 
 	/**
-	 * @notice 竞价
-	 * @param _auctionId 拍卖 ID
-	 * @param _tokenAddress 参与竞价的资产类型（地址）
-	 * @param amount 参与竞价的资产数量
+	 * @notice 使用 ETH 竞价
 	 */
-	function placeBid(uint256 _auctionId, address _tokenAddress, uint256 amount) external payable nonReentrant {
+	function placeBidETH(uint256 _auctionId) public payable nonReentrant {
 		Auction storage auction = auctions[_auctionId];
 		_validateBidConditions(auction, auction.seller);
 		IPriceOracleReader oracle = _getPriceOracleReader(auction);
 
-		uint256 bidAmount; // ETH 或 ERC-20 代币数量
-		{
-			uint256 payValue; // 计算当前出价的美元价值（标准化为 8 位小数）
-			if (_tokenAddress == address(0)) {
-				// 用户使用 ETH 竞价
-				(payValue, bidAmount) = _calculateETHBidValue(oracle);
-			} else {
-				// 用户使用 ERC-20 代币竞价
-				(payValue, bidAmount) = _calculateERC20BidValue(oracle, _tokenAddress, amount);
-			}
-			// 验证出价是否足够高
-			_validateBidAmount(oracle, auction, payValue, auction.tokenAddress, auction.highestBid);
-		}
+		uint256 bidAmount; // ETH 数量
+		uint256 payValue;  // 美元价值（8 位小数）
+		(payValue, bidAmount) = _calculateETHBidValue(oracle);
+
+		_validateBidAmount(oracle, auction, payValue, auction.tokenAddress, auction.highestBid);
 
 		// 保存前一个出价者信息（用于退款）
 		address previousBidder = auction.highestBidder;
 		uint256 previousBid = auction.highestBid;
 		address previousTokenAddress = auction.tokenAddress;
 
-		// 收取最新出价（ERC-20 代币）
-		_transferBidAmount(_tokenAddress, bidAmount);
+		// 先更新拍卖状态
+		auction.tokenAddress = address(0);
+		auction.highestBidder = msg.sender;
+		auction.highestBid = bidAmount;
+
+		// 退款给之前的出价者
+		_refundPreviousBidder(previousBidder, previousTokenAddress, previousBid);
+
+		emit NewHighestBid(_auctionId, msg.sender, bidAmount, address(0));
+	}
+
+	/**
+	 * @notice 使用 ERC-20 代币竞价
+	 */
+	function placeBidToken(uint256 _auctionId, address _tokenAddress, uint256 amount) public nonReentrant {
+		Auction storage auction = auctions[_auctionId];
+		_validateBidConditions(auction, auction.seller);
+		IPriceOracleReader oracle = _getPriceOracleReader(auction);
+
+		uint256 payValue;  // 美元价值（8 位小数）
+		payValue = _calculateERC20BidValue(oracle, _tokenAddress, amount);
+
+		_validateBidAmount(oracle, auction, payValue, auction.tokenAddress, auction.highestBid);
+
+		// 保存前一个出价者信息（用于退款）
+		address previousBidder = auction.highestBidder;
+		uint256 previousBid = auction.highestBid;
+		address previousTokenAddress = auction.tokenAddress;
+
+		// 把代币从用户（买家）转移到拍卖合约中托管
+		IERC20(_tokenAddress).transferFrom(msg.sender, address(this), amount);
 
 		// 先更新拍卖状态
 		auction.tokenAddress = _tokenAddress;
 		auction.highestBidder = msg.sender;
-		auction.highestBid = bidAmount;
-
-		// 触发新的最高出价事件
-		emit NewHighestBid(_auctionId, msg.sender, bidAmount, _tokenAddress);
+		auction.highestBid = amount;
 
 		// 退款给之前的出价者
 		_refundPreviousBidder(previousBidder, previousTokenAddress, previousBid);
+
+		emit NewHighestBid(_auctionId, msg.sender, amount, _tokenAddress);
 	}
 
 	/**
@@ -370,10 +381,10 @@ contract NFTAuction is Initializable, IERC721Receiver, UUPSUpgradeable, Reentran
     }
 
 	/**
-	 * @notice 拒绝直接接收 ETH，要求使用 placeBid() 函数
+	 * @notice 拒绝直接接收 ETH，要求使用 placeBidETH() 或者 placeBidToken() 函数
 	 */
     receive() external payable {
-        revert("Please use placeBid() to participate in auction");
+        revert("Please use placeBidETH() or placeBidToken() to participate in auction");
     }
 
 	/**

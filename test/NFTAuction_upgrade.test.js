@@ -196,7 +196,7 @@ describe("NFTAuction 升级测试", function () {
 
 			// 进行竞价
 			const bidValue = ethers.parseEther("1"); // 1 ETH
-			await nftAuction.connect(user2).placeBid(0, ethers.ZeroAddress, 0, { value: bidValue });
+			await nftAuction.connect(user2).placeBidETH(0, { value: bidValue });
 
 			// 升级合约
 			const NFTAuctionV2 = await ethers.getContractFactory("NFTAuction");
@@ -236,7 +236,7 @@ describe("NFTAuction 升级测试", function () {
 			}
 
 			// 对第一个拍卖进行竞价
-			await nftAuction.connect(user2).placeBid(0, ethers.ZeroAddress, 0, {
+			await nftAuction.connect(user2).placeBidETH(0, {
 				value: ethers.parseEther("1")
 			});
 
@@ -250,7 +250,7 @@ describe("NFTAuction 升级测试", function () {
 
 			// 升级后继续对其他拍卖竞价
 			await expect(
-				upgraded.connect(user2).placeBid(1, ethers.ZeroAddress, 0, {
+				upgraded.connect(user2).placeBidETH(1, {
 					value: ethers.parseEther("1")
 				})
 			).to.emit(upgraded, "NewHighestBid");

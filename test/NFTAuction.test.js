@@ -175,7 +175,7 @@ describe("NFT 拍卖测试", function () {
       const bidAmount = ethers.parseEther("0.4"); // 略高于最低要求
 
       await expect(
-        nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+        nftAuction.connect(bidder1).placeBidETH(0, {
           value: bidAmount
         })
       ).to.not.be.reverted;
@@ -190,7 +190,7 @@ describe("NFT 拍卖测试", function () {
       const lowBid = ethers.parseEther("0.1");
 
       await expect(
-        nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+        nftAuction.connect(bidder1).placeBidETH(0, {
           value: lowBid
         })
       ).to.be.revertedWithCustomError(nftAuction, "BidMustBeAtLeastStartingPrice");
@@ -198,13 +198,13 @@ describe("NFT 拍卖测试", function () {
 
     it("后续出价必须高于当前最高价", async function () {
       const firstBid = ethers.parseEther("0.5");
-      await nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+      await nftAuction.connect(bidder1).placeBidETH(0, {
         value: firstBid
       });
 
       // 出价相同或更低应该失败
       await expect(
-        nftAuction.connect(bidder2).placeBid(0, ethers.ZeroAddress, 0, {
+        nftAuction.connect(bidder2).placeBidETH(0, {
           value: firstBid
         })
       ).to.be.revertedWithCustomError(nftAuction, "BidMustBeHigherThanCurrentHighestBid");
@@ -214,13 +214,13 @@ describe("NFT 拍卖测试", function () {
       const firstBid = ethers.parseEther("0.5");
       const secondBid = ethers.parseEther("0.6");
 
-      await nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+      await nftAuction.connect(bidder1).placeBidETH(0, {
         value: firstBid
       });
 
       const bidder1BalanceBefore = await ethers.provider.getBalance(bidder1.address);
 
-      await nftAuction.connect(bidder2).placeBid(0, ethers.ZeroAddress, 0, {
+      await nftAuction.connect(bidder2).placeBidETH(0, {
         value: secondBid
       });
 
@@ -232,7 +232,7 @@ describe("NFT 拍卖测试", function () {
       await time.increase(100001); // 超过拍卖时间
 
       await expect(
-        nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+        nftAuction.connect(bidder1).placeBidETH(0, {
           value: ethers.parseEther("1.0")
         })
       ).to.be.revertedWithCustomError(nftAuction, "AuctionExpired");
@@ -258,7 +258,7 @@ describe("NFT 拍卖测试", function () {
       await mockUSDC.connect(bidder1).approve(nftAuctionAddress, bidAmount);
 
       await expect(
-        nftAuction.connect(bidder1).placeBid(
+        nftAuction.connect(bidder1).placeBidToken(
           0,
           await mockUSDC.getAddress(),
           bidAmount
@@ -270,26 +270,12 @@ describe("NFT 拍卖测试", function () {
       expect(auction.tokenAddress).to.equal(await mockUSDC.getAddress());
     });
 
-    it("USDC 竞价不能附带 ETH", async function () {
-      const bidAmount = ethers.parseUnits("1100", USDC_DECIMALS);
-      await mockUSDC.connect(bidder1).approve(nftAuctionAddress, bidAmount);
-
-      await expect(
-        nftAuction.connect(bidder1).placeBid(
-          0,
-          await mockUSDC.getAddress(),
-          bidAmount,
-          { value: ethers.parseEther("0.1") } // 不应该发送 ETH
-        )
-      ).to.be.revertedWithCustomError(nftAuction, "ETHNotAcceptedForERC20Bids");
-    });
-
     it("USDC 竞价需要先授权", async function () {
       const bidAmount = ethers.parseUnits("1100", USDC_DECIMALS);
 
       // 没有授权直接竞价
       await expect(
-        nftAuction.connect(bidder1).placeBid(
+        nftAuction.connect(bidder1).placeBidToken(
           0,
           await mockUSDC.getAddress(),
           bidAmount
@@ -313,7 +299,7 @@ describe("NFT 拍卖测试", function () {
     it("ETH 出价后可以用 USDC 覆盖", async function () {
       // 第一次出价：0.5 ETH ($1400)
       const ethBid = ethers.parseEther("0.5");
-      await nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+      await nftAuction.connect(bidder1).placeBidETH(0, {
         value: ethBid
       });
 
@@ -323,7 +309,7 @@ describe("NFT 拍卖测试", function () {
 
       const bidder1BalanceBefore = await ethers.provider.getBalance(bidder1.address);
 
-      await nftAuction.connect(bidder2).placeBid(
+      await nftAuction.connect(bidder2).placeBidToken(
         0,
         await mockUSDC.getAddress(),
         usdcBid
@@ -343,7 +329,7 @@ describe("NFT 拍卖测试", function () {
       // 第一次出价：1200 USDC ($1200)
       const usdcBid = ethers.parseUnits("1200", USDC_DECIMALS);
       await mockUSDC.connect(bidder1).approve(nftAuctionAddress, usdcBid);
-      await nftAuction.connect(bidder1).placeBid(
+      await nftAuction.connect(bidder1).placeBidToken(
         0,
         await mockUSDC.getAddress(),
         usdcBid
@@ -354,7 +340,7 @@ describe("NFT 拍卖测试", function () {
 
       const bidder1USDCBefore = await mockUSDC.balanceOf(bidder1.address);
 
-      await nftAuction.connect(bidder2).placeBid(0, ethers.ZeroAddress, 0, {
+      await nftAuction.connect(bidder2).placeBidETH(0, {
         value: ethBid
       });
 
@@ -383,7 +369,7 @@ describe("NFT 拍卖测试", function () {
 
     it("ETH 竞价成功后，卖家应该收到 ETH", async function () {
       const bidAmount = ethers.parseEther("0.5");
-      await nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+      await nftAuction.connect(bidder1).placeBidETH(0, {
         value: bidAmount
       });
 
@@ -402,7 +388,7 @@ describe("NFT 拍卖测试", function () {
     it("USDC 竞价成功后，卖家应该收到 USDC", async function () {
       const bidAmount = ethers.parseUnits("1200", USDC_DECIMALS);
       await mockUSDC.connect(bidder1).approve(nftAuctionAddress, bidAmount);
-      await nftAuction.connect(bidder1).placeBid(
+      await nftAuction.connect(bidder1).placeBidToken(
         0,
         await mockUSDC.getAddress(),
         bidAmount
@@ -420,7 +406,7 @@ describe("NFT 拍卖测试", function () {
 
     it("拍卖成功后，NFT 应该转移给最高出价者", async function () {
       const bidAmount = ethers.parseEther("0.5");
-      await nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+      await nftAuction.connect(bidder1).placeBidETH(0, {
         value: bidAmount
       });
 
@@ -476,7 +462,7 @@ describe("NFT 拍卖测试", function () {
       await mockETHUSD.updateAnswer(-100);
 
       await expect(
-        nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+        nftAuction.connect(bidder1).placeBidETH(0, {
           value: ethers.parseEther("0.5")
         })
       ).to.be.revertedWithCustomError(priceOracleReader, "InvalidPrice");
@@ -501,18 +487,18 @@ describe("NFT 拍卖测试", function () {
           to: nftAuctionAddress,
           value: ethers.parseEther("1.0")
         })
-      ).to.be.revertedWith("Please use placeBid() to participate in auction");
+      ).to.be.revertedWith("Please use placeBidETH() or placeBidToken() to participate in auction");
     });
 
     it("CEI 模式：状态先更新再退款", async function () {
       // 第一次出价
-      await nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+      await nftAuction.connect(bidder1).placeBidETH(0, {
         value: ethers.parseEther("0.5")
       });
 
       // 第二次出价应该成功（即使退款在后面）
       await expect(
-        nftAuction.connect(bidder2).placeBid(0, ethers.ZeroAddress, 0, {
+        nftAuction.connect(bidder2).placeBidETH(0, {
           value: ethers.parseEther("0.6")
         })
       ).to.not.be.reverted;

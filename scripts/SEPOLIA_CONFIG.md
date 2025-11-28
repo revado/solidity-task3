@@ -203,7 +203,7 @@ await nftAuction.createAuction(
 
 ```javascript
 // ETH 出价
-await nftAuction.placeBid(0, ethers.ZeroAddress, 0, {
+await nftAuction.placeBidETH(0, {
   value: ethers.parseEther("0.5")  // 0.5 ETH
 });
 
@@ -211,7 +211,7 @@ await nftAuction.placeBid(0, ethers.ZeroAddress, 0, {
 const mockUSDC = await ethers.getContractAt("MockERC20", "0xYourUSDCAddress");
 const amount = ethers.parseUnits("1500", 6); // 1500 USDC
 await mockUSDC.approve(await nftAuction.getAddress(), amount);
-await nftAuction.placeBid(0, await mockUSDC.getAddress(), amount);
+await nftAuction.placeBidToken(0, await mockUSDC.getAddress(), amount);
 ```
 
 ## 🔧 常见问题

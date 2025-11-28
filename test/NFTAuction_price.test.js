@@ -97,7 +97,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
       await mockDAI.connect(bidder1).approve(await nftAuction.getAddress(), bidAmount);
 
       await expect(
-        nftAuction.connect(bidder1).placeBid(
+        nftAuction.connect(bidder1).placeBidToken(
           0,
           await mockDAI.getAddress(),
           bidAmount
@@ -111,7 +111,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
 
     it("DAI 出价应该能与 ETH 出价正确比较", async function () {
       // 第一次出价：0.4 ETH ($1120)
-      await nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+      await nftAuction.connect(bidder1).placeBidETH(0, {
         value: ethers.parseEther("0.4")
       });
 
@@ -120,7 +120,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
       await mockDAI.connect(bidder2).approve(await nftAuction.getAddress(), daiAmount);
 
       await expect(
-        nftAuction.connect(bidder2).placeBid(
+        nftAuction.connect(bidder2).placeBidToken(
           0,
           await mockDAI.getAddress(),
           daiAmount
@@ -151,7 +151,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
       await mockWBTC.connect(bidder1).approve(await nftAuction.getAddress(), bidAmount);
 
       await expect(
-        nftAuction.connect(bidder1).placeBid(
+        nftAuction.connect(bidder1).placeBidToken(
           0,
           await mockWBTC.getAddress(),
           bidAmount
@@ -165,7 +165,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
 
     it("WBTC 出价应该能与 ETH 出价正确比较", async function () {
       // 第一次出价：0.5 ETH ($1400)
-      await nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+      await nftAuction.connect(bidder1).placeBidETH(0, {
         value: ethers.parseEther("0.5")
       });
 
@@ -174,7 +174,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
       await mockWBTC.connect(bidder2).approve(await nftAuction.getAddress(), wbtcAmount);
 
       await expect(
-        nftAuction.connect(bidder2).placeBid(
+        nftAuction.connect(bidder2).placeBidToken(
           0,
           await mockWBTC.getAddress(),
           wbtcAmount
@@ -202,7 +202,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
       // 第一次：1200 DAI ($1200)
       const daiAmount = ethers.parseUnits("1200", 18);
       await mockDAI.connect(bidder1).approve(await nftAuction.getAddress(), daiAmount);
-      await nftAuction.connect(bidder1).placeBid(
+      await nftAuction.connect(bidder1).placeBidToken(
         0,
         await mockDAI.getAddress(),
         daiAmount
@@ -217,7 +217,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
       const wbtcAmount = ethers.parseUnits("0.035", 8);
       await mockWBTC.connect(bidder2).approve(await nftAuction.getAddress(), wbtcAmount);
 
-      await nftAuction.connect(bidder2).placeBid(
+      await nftAuction.connect(bidder2).placeBidToken(
         0,
         await mockWBTC.getAddress(),
         wbtcAmount
@@ -242,7 +242,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
       // 第一次：0.03 WBTC ($1200)
       const wbtcAmount = ethers.parseUnits("0.03", 8);
       await mockWBTC.connect(bidder1).approve(await nftAuction.getAddress(), wbtcAmount);
-      await nftAuction.connect(bidder1).placeBid(
+      await nftAuction.connect(bidder1).placeBidToken(
         0,
         await mockWBTC.getAddress(),
         wbtcAmount
@@ -251,7 +251,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
       // 第二次：1500 DAI ($1500)
       const daiAmount = ethers.parseUnits("1500", 18);
       await mockDAI.connect(bidder2).approve(await nftAuction.getAddress(), daiAmount);
-      await nftAuction.connect(bidder2).placeBid(
+      await nftAuction.connect(bidder2).placeBidToken(
         0,
         await mockDAI.getAddress(),
         daiAmount
@@ -263,7 +263,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
       );
 
       // 第三次：0.6 ETH ($1680)
-      await nftAuction.connect(bidder1).placeBid(0, ethers.ZeroAddress, 0, {
+      await nftAuction.connect(bidder1).placeBidETH(0, {
         value: ethers.parseEther("0.6")
       });
 
@@ -298,7 +298,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
       await mockWBTC.connect(bidder1).approve(await nftAuction.getAddress(), wbtcAmount);
 
       await expect(
-        nftAuction.connect(bidder1).placeBid(
+        nftAuction.connect(bidder1).placeBidToken(
           0,
           await mockWBTC.getAddress(),
           wbtcAmount
@@ -313,7 +313,7 @@ describe("NFTAuction - 不同精度代币测试", function () {
       await mockDAI.connect(bidder1).approve(await nftAuction.getAddress(), daiAmount);
 
       await expect(
-        nftAuction.connect(bidder1).placeBid(
+        nftAuction.connect(bidder1).placeBidToken(
           0,
           await mockDAI.getAddress(),
           daiAmount
